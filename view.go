@@ -103,13 +103,13 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	}
 	list := ui.Sidebar(c, &selected, func() {
 		ui.SidebarSection(c, "发现", nil, func() {
-			ui.SidebarItem(c, "/discover", iconHome, "推荐")
-			ui.SidebarItem(c, "/rank", iconChart, "排行榜")
-			ui.SidebarItem(c, "/new", iconCalendar, "新剧上线")
-			ui.SidebarItem(c, "/search", iconFlame, "热搜")
+			a.sectionItem(c, selected, "/discover", iconHome, "推荐")
+			a.sectionItem(c, selected, "/rank", iconChart, "排行榜")
+			a.sectionItem(c, selected, "/new", iconCalendar, "新剧上线")
+			a.sectionItem(c, selected, "/search", iconFlame, "热搜")
 		})
 		ui.SidebarSection(c, "我的", nil, func() {
-			ui.SidebarItem(c, "/favorites", iconStar, "收藏").Children(func() {
+			a.sectionItem(c, selected, "/favorites", iconStar, "收藏").Children(func() {
 				if n := len(a.favs.list); n > 0 {
 					ui.Textf(c, "%d", n).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
 				}
@@ -131,6 +131,18 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	if list.Changed() {
 		a.router.Push(selected)
 	}
+}
+
+// sectionItem is the sidebar's item of a section's page. The item stays
+// chosen while a series opened from the page shows, and while search
+// results show under 热搜, so a click on it changes no choice: it goes to
+// the page itself, as the item promises.
+func (a *app) sectionItem(c *ui.Context, selected, id string, icon *ui.SVG, label string) ui.Element {
+	item := ui.SidebarItem(c, id, icon, label)
+	if item.Clicked() && id == selected && a.router.Location() != id {
+		a.router.Push(id)
+	}
+	return item
 }
 
 // header is a page's title, level with the window controls, and what goes
