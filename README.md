@@ -8,10 +8,7 @@
 
 从 [Releases](https://github.com/kadaliao/kaixinguo/releases) 下载 `kai-xin-guo-<版本>.dmg`，打开后把「开心果」拖进「应用程序」。一个安装包同时支持 Apple 芯片和 Intel，需要 macOS 12 或更高版本。
 
-应用用 Developer ID 签了名，但还没有经过苹果公证。第一次打开时 macOS 会提示无法验证开发者，有两种办法：
-
-- 打开「系统设置 › 隐私与安全性」，在页面下方点「仍要打开」；
-- 或者在终端执行 `xattr -dr com.apple.quarantine /Applications/开心果.app`。
+应用用 Developer ID 签名，并通过了苹果公证，双击即可打开。
 
 ## 从源码构建
 
@@ -22,6 +19,8 @@ go tool mygo dev     # 开发：改代码自动重启
 go tool mygo build   # 打包：build/darwin-arm64/开心果.app 和 .dmg
 go test ./...        # 测试，不需要网络和窗口
 ```
+
+发版用 `scripts/release.sh`：打包通用版、用 Developer ID 签名、提交公证并附上公证票据。用法写在脚本开头。
 
 排查网络问题时，用 `KX_DEBUG=1` 从终端启动 `开心果.app/Contents/MacOS/开心果`，会打印每个请求。
 
