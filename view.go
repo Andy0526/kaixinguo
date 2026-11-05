@@ -32,10 +32,14 @@ func (a *app) view(c *ui.Context) {
 		a.panelOpen = false
 		a.panelSuppressed = false
 		a.panelJustClosed = false
+		a.panelReveal = false
+		a.panelPinned = false
+		a.playerSet = false
 		a.theaterShown = false
-		if a.fullscreen {
-			a.setFullScreen(false) // the theater is the player's, not the page's
+		if a.fullscreen && a.theaterFullscreen {
+			a.setFullScreen(false) // only the full screen the theater entered
 		}
+		a.theaterFullscreen = false
 		a.playerAppearance(false)
 	}
 	if !a.onPlayer && onPlayer {
@@ -89,7 +93,7 @@ func (a *app) view(c *ui.Context) {
 		}).Grow(1).MinWidth(0).Background(t.Background)
 	})
 
-	if !a.tutorialOn && !a.playerTutorialOn {
+	if !a.tutorialOn && !(onPlayer && a.playerTutorialOn) {
 		c.OnShortcut(ui.Cmd, ui.KeyF, func() {
 			if onPlayer {
 				a.leavePlayer()
@@ -139,10 +143,32 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 			})
 		})
 		if len(a.hist.list) > 0 {
-			ui.SidebarSection(c, "最近观看", &a.recentOpen, func() {
-				for _, w := range a.hist.list[:min(len(a.hist.list), 8)] {
+			ui.SidebarSection(c, "最近播放", &a.recentOpen, func() {
+				ui.Row(c).Gap(3).Padding(0, 8, 4, 8).Children(func() {
+					for _, f := range []struct{ id, label string }{
+						{"", "全部"}, {"want", "想看"}, {"watching", "正在看"}, {"done", "已看完"},
+					} {
+						if a.recentFilterButton(c, f.id, f.label) {
+							a.recentFilter = f.id
+						}
+					}
+				})
+				items := a.hist.filtered(a.recentFilter)
+				if len(items) == 0 {
+					ui.Text(c, "还没有这样的剧").FontSize(11).TextColor(t.TextMuted).
+						Padding(3, 12, 8, 12)
+					return
+				}
+				for _, w := range items[:min(len(items), 8)] {
 					ui.SidebarItem(c.Key(w.SeriesID), "/series/"+w.SeriesID, iconClock, w.Title).Children(func() {
-						ui.Textf(c, "%d", w.Episode).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+						switch w.status() {
+						case "want":
+							ui.Text(c, "想看").FontSize(11).TextColor(t.TextMuted)
+						case "done":
+							ui.Text(c, "看完").FontSize(11).TextColor(t.TextMuted)
+						default:
+							ui.Textf(c, "%d", w.Episode).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+						}
 					})
 				}
 			})
@@ -154,6 +180,26 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	if list.Changed() {
 		a.router.Push(selected)
 	}
+}
+
+// recentFilterButton is one of the recent list's status filters.
+func (a *app) recentFilterButton(c *ui.Context, id, label string) bool {
+	t := c.Theme()
+	on := a.recentFilter == id
+	b := ui.ButtonBase(c.Key("recent:"+id)).Padding(3, 7).Radius(999).Label(label).
+		Cursor(ui.CursorPointer)
+	switch {
+	case on:
+		b.Background(t.Accent).TextColor(t.AccentText)
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.14))
+	default:
+		b.Background(t.Text.Alpha(0.07))
+	}
+	b.Children(func() {
+		ui.Text(c, label).FontSize(10.5).FontWeight(500)
+	})
+	return b.Clicked()
 }
 
 // sectionItem is the sidebar's item of a section's page. The item stays

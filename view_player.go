@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/beilunyang/openhongguo/sdk/model"
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
@@ -24,6 +26,10 @@ func (a *app) playerView(c *ui.Context, id string) {
 			a.play(sid, n, start)
 		}
 	}
+	if !a.playerSet && a.web != nil {
+		a.playerSet = true
+		a.evalJS(fmt.Sprintf("kx.setDoubleClickInterval(%d)", doubleClickInterval().Milliseconds()))
+	}
 	// Theater is the player filling the screen. The episodes come back
 	// from the right edge, hidden until asked for.
 	theater := a.onPlayer && a.fullscreen
@@ -32,12 +38,13 @@ func (a *app) playerView(c *ui.Context, id string) {
 		a.panelOpen = false
 		a.panelSuppressed = false
 		a.panelJustClosed = false
+		a.panelReveal = false
 	}
-	// The player's first visit pauses for its own tour; the last page
-	// starts the episode.
-	if a.playerTutorialOn && !a.playerTutorialPaused {
-		a.playerTutorialPaused = true
-		a.evalJS("kx.pause()")
+	// The player's first visit holds playback for its own tour; the
+	// last page lets the episode start.
+	if a.playerTutorialOn && !a.playerTutorialHeld {
+		a.playerTutorialHeld = true
+		a.evalJS("kx.setHold(true)")
 	}
 	dark := *ui.DarkTheme()
 	dark.Accent, dark.AccentText = c.Theme().Accent, c.Theme().AccentText
@@ -48,12 +55,14 @@ func (a *app) playerView(c *ui.Context, id string) {
 				if a.web != nil {
 					ui.WebView(c, a.web).Fill()
 				}
+				a.playerOverlay(c)
 				// The edge is the theater's way into the episodes: the
 				// pointer near it opens them, and leaving them closes them.
+				// It goes over the failure layer, which would otherwise
+				// keep the drawer out of reach.
 				if theater {
 					edgeHovered = a.episodesEdge(c)
 				}
-				a.playerOverlay(c)
 				ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(titleBarHeight).DragWindow()
 				a.exitButton(c)
 				a.playerToolbar(c, theater)
@@ -66,12 +75,23 @@ func (a *app) playerView(c *ui.Context, id string) {
 			justClosed := a.panelJustClosed
 			a.panelJustClosed = false
 			if edgeHovered && !a.panelSuppressed {
+				if !a.panelOpen {
+					a.panelReveal = true
+				}
 				a.panelOpen = true
 			}
 			if a.panelOpen {
+				justOpened := a.panelReveal
 				hovered := a.theaterPanel(c, sp)
-				if !edgeHovered && !hovered {
+				if hovered {
+					a.panelPinned = false
+				}
+				if !justOpened && !a.panelPinned && !edgeHovered && !hovered {
 					a.panelOpen = false
+					a.panelReveal = false
+					// The overlay was already built this frame; take it away
+					// on the next one.
+					c.Invalidate()
 				}
 			} else if !edgeHovered && !justClosed {
 				// Let the edge open the episodes again once the pointer
@@ -85,14 +105,11 @@ func (a *app) playerView(c *ui.Context, id string) {
 			a.playerTutorial(c)
 		}
 	})
-	if !a.tutorialOn && !a.playerTutorialOn {
-		a.playerShortcuts(c)
-	}
 }
 
-// playerShortcuts are the player's keys, where the player builds them:
-// the page's, and, from the window's view, the window's too, so that they
-// go on working when the focus left the page.
+// playerShortcuts are the player's keys. The window registers them, not
+// the player's page, so they keep working when the focus leaves the page,
+// as it does when the theater's episodes close.
 func (a *app) playerShortcuts(c *ui.Context) {
 	c.OnShortcut(0, ui.KeySpace, func() { a.evalJS("kx.toggle()") })
 	c.OnShortcut(0, ui.KeyLeft, func() { a.evalJS("kx.seek(-5)") })
@@ -120,7 +137,15 @@ func (a *app) toggleTheater() {
 	a.panelOpen = false
 	a.panelSuppressed = false
 	a.panelJustClosed = false
-	a.setFullScreen(!a.fullscreen)
+	a.panelReveal = false
+	a.panelPinned = false
+	if a.fullscreen {
+		a.theaterFullscreen = false
+		a.setFullScreen(false)
+		return
+	}
+	a.theaterFullscreen = true
+	a.setFullScreen(true)
 }
 
 // exitTheater leaves full screen, back to the player beside its episodes.
@@ -128,19 +153,27 @@ func (a *app) exitTheater() {
 	a.panelOpen = false
 	a.panelSuppressed = false
 	a.panelJustClosed = false
+	a.panelReveal = false
+	a.panelPinned = false
 	a.theaterShown = false
+	a.theaterFullscreen = false
 	if a.fullscreen {
 		a.setFullScreen(false)
 	}
 }
 
-// leavePlayer leaves the player, full screen and all.
+// leavePlayer leaves the player, and the full screen if the theater
+// entered it. A full screen the viewer opened before stays.
 func (a *app) leavePlayer() {
 	a.panelOpen = false
 	a.panelSuppressed = false
 	a.panelJustClosed = false
+	a.panelReveal = false
+	a.panelPinned = false
 	a.theaterShown = false
-	if a.fullscreen {
+	owned := a.theaterFullscreen
+	a.theaterFullscreen = false
+	if a.fullscreen && owned {
 		a.setFullScreen(false)
 	}
 	if a.router.CanGoBack() {
@@ -181,7 +214,18 @@ func (a *app) exitButton(c *ui.Context) {
 func (a *app) playerToolbar(c *ui.Context, theater bool) {
 	ui.Row(c).Absolute().Top(10).Right(14).Gap(2).Padding(3).Radius(12).
 		Material(glass.Glass{}).Children(func() {
-		// The episodes are the right edge's handle, not a toolbar button.
+		if theater {
+			if a.playerToolButton(c, "episodes", iconList, "选集", a.panelOpen) {
+				if a.panelOpen {
+					a.closePanel()
+				} else {
+					a.panelOpen = true
+					a.panelSuppressed = false
+					a.panelReveal = true
+					a.panelPinned = true
+				}
+			}
+		}
 		label := "影院"
 		if theater {
 			label = "退出影院"
@@ -218,8 +262,7 @@ func (a *app) playerToolButton(c *ui.Context, key string, ic *ui.SVG, label stri
 // the padding beside the toolbar and bottom bar, whose controls are above
 // it and keep the pointer.
 func (a *app) episodesEdge(c *ui.Context) bool {
-	b := ui.ButtonBase(c.Key("episodes-edge")).Absolute().Right(0).Top(0).Bottom(0).Width(16).
-		Label("右侧边缘").Cursor(ui.CursorPointer)
+	b := ui.Box(c).Absolute().Right(0).Top(0).Bottom(0).Width(16).Cursor(ui.CursorPointer)
 	return b.Hovered()
 }
 
@@ -229,6 +272,8 @@ func (a *app) closePanel() {
 	a.panelOpen = false
 	a.panelSuppressed = true
 	a.panelJustClosed = true
+	a.panelReveal = false
+	a.panelPinned = false
 }
 
 // theaterPanel is the episodes drawer over the video: a dimmed backdrop
@@ -238,7 +283,7 @@ func (a *app) theaterPanel(c *ui.Context, sp *seriesPage) bool {
 	var hovered bool
 	ui.Overlay(c, func() {
 		back := ui.Row(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Justify(ui.End).
-			Background(ui.RGBA(0, 0, 0, 0.42)).Modal()
+			Background(ui.RGBA(0, 0, 0, 0.42))
 		back.Children(func() {
 			panel := ui.Column(c.Key("theater-panel")).Width(playerPanelWidth).FillHeight().
 				Background(playerPanelColor).Shadow(-18, 0, 48, 0, ui.RGBA(0, 0, 0, 0.5)).
@@ -252,7 +297,9 @@ func (a *app) theaterPanel(c *ui.Context, sp *seriesPage) bool {
 					}
 				})
 				ui.Divider(c).Background(ui.RGBA(255, 255, 255, 0.06))
-				a.playerPanelBody(c, sp)
+				reveal := a.panelReveal
+				a.panelReveal = false
+				a.playerPanelBody(c, sp, true, reveal)
 			})
 			hovered = panel.Hovered()
 			if panel.PressedOutside() || back.OverlayShortcut(0, ui.KeyEscape) {
@@ -287,7 +334,9 @@ func (a *app) playerOverlay(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
-	ov := ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().Gap(14)
+	// Below the title bar, so the exit and the episodes stay reachable
+	// when an episode fails.
+	ov := ui.Column(c).Absolute().Top(titleBarHeight).Left(0).Right(0).Bottom(0).Center().Gap(14)
 	if p.state == playFailed {
 		ov.Background(ui.RGBA(0, 0, 0, 0.82))
 	} else {
@@ -321,13 +370,13 @@ func (a *app) playerOverlay(c *ui.Context) {
 func (a *app) playerPanel(c *ui.Context, sp *seriesPage) {
 	ui.Column(c).Width(playerPanelWidth).Shrink(0).Background(playerPanelColor).Children(func() {
 		ui.Box(c).Height(titleBarHeight).Shrink(0).DragWindow()
-		a.playerPanelBody(c, sp)
+		a.playerPanelBody(c, sp, false, false)
 	})
 }
 
 // playerPanelBody is what the episode list shows, under its drag area or
 // the drawer's title.
-func (a *app) playerPanelBody(c *ui.Context, sp *seriesPage) {
+func (a *app) playerPanelBody(c *ui.Context, sp *seriesPage, drawer, forceReveal bool) {
 	t := c.Theme()
 	if sp.series == nil {
 		ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c).FontSize(18) })
@@ -344,25 +393,27 @@ func (a *app) playerPanelBody(c *ui.Context, sp *seriesPage) {
 			ui.Box(c).Height(4)
 			a.seasonPicker(c, sp, func(se model.Season) { a.playSeason(se.SeriesID) })
 		}
-		a.partPicker(c, sp)
+		a.partPicker(c, sp, drawer)
 	})
 	ui.Divider(c).Background(ui.RGBA(255, 255, 255, 0.06))
 	// Bring the episode playing into view as it changes.
-	reveal := cur > 0 && cur != sp.lastShown
+	reveal := cur > 0 && (forceReveal || cur != sp.lastShown)
 	if reveal {
 		sp.part = (cur - 1) / episodesPerPart
 		sp.lastShown = cur
 	}
 	lo, hi := a.partRange(sp)
+	w, _ := a.hist.get(sp.id)
 	ui.Scroll(c).Grow(1).Padding(14, 16, 22, 16).Children(func() {
 		ui.Row(c).Wrap().Gap(8).Children(func() {
 			for _, e := range sp.episodes[lo:hi] {
-				chip := a.episodeChip(c, e, e.Number == cur, t).Size(44, 38)
+				watched, progress := w.episodeState(e.Number)
+				chip := a.episodeChip(c, e, e.Number == cur, watched, progress, t).Size(44, 38)
 				if reveal && e.Number == cur {
 					chip.ScrollIntoView()
 				}
 				if chip.Clicked() && e.Playable && e.Number != cur {
-					a.play(sp.id, e.Number, 0)
+					a.play(sp.id, e.Number, w.episodeStart(e.Number))
 				}
 			}
 		})

@@ -391,6 +391,7 @@ const playBtn = document.getElementById('play');
 const muteBtn = document.getElementById('mute');
 const pipBtn = document.getElementById('pip');
 let ep = '', last = 0, brightness = 1, hudTimer = 0, hideTimer = 0, seeking = false;
+let hold = false, dblInterval = 500;
 function send(type, extra) {
   fetch('event?type=' + type + '&ep=' + encodeURIComponent(ep) + (extra || '')).catch(() => {});
 }
@@ -434,14 +435,21 @@ function showHud(text) {
 }
 window.kx = {
   play(src, id, start) {
-    ep = id; last = 0;
+    ep = id; last = 0; seeking = false;
     v.src = src;
     if (start > 0) v.addEventListener('loadedmetadata', () => { v.currentTime = start }, {once: true});
-    v.play().catch(e => { if (e.name !== 'AbortError') send('error', '&msg=' + encodeURIComponent(e.message)) });
+    if (!hold) v.play().catch(e => { if (e.name !== 'AbortError') send('error', '&msg=' + encodeURIComponent(e.message)) });
   },
   stop() { v.pause(); v.removeAttribute('src'); v.load(); },
   pause() { v.pause() },
-  resume() { v.play().catch(() => {}) },
+  setHold(on) {
+    hold = !!on;
+    if (hold) v.pause();
+    else if (v.src) v.play().catch(() => {});
+  },
+  setDoubleClickInterval(ms) {
+    if (isFinite(ms) && ms >= 100 && ms <= 5000) dblInterval = ms;
+  },
   toggle() { v.paused ? v.play() : v.pause() },
   seek(d) { v.currentTime = Math.max(0, v.currentTime + d) },
 };
@@ -452,8 +460,10 @@ window.addEventListener('wheel', e => {
   if (!v.src || Math.abs(dy) < 0.5) return;
   e.preventDefault();
   if (e.clientX >= window.innerWidth / 2) {
+    const before = v.volume;
     v.volume = clamp(v.volume - dy / 800, 0, 1);
-    v.muted = v.volume === 0;
+    if (v.volume === 0) v.muted = true;
+    else if (v.volume > before) v.muted = false;
     syncVolume();
     showHud('音量 ' + Math.round(v.volume * 100) + '%');
   } else {
@@ -483,13 +493,18 @@ vol.addEventListener('input', () => {
   v.muted = v.volume === 0;
   syncVolume();
 });
+vol.addEventListener('change', () => vol.blur());
+vol.addEventListener('pointerup', () => vol.blur());
 // A click on the picture plays or pauses it, as the video's controls do;
-// a double click, held back until the second click is known, changes to
-// or from the theater instead.
+// a double click, held back until the system's double-click window has
+// passed, changes to or from the theater instead.
 let clickTimer = 0;
-v.addEventListener('click', () => {
+v.addEventListener('click', e => {
   clearTimeout(clickTimer);
-  clickTimer = setTimeout(() => kx.toggle(), 240);
+  if (e.detail > 1) return;
+  // A little past the system interval, so the dblclick still wins at the
+  // boundary.
+  clickTimer = setTimeout(() => kx.toggle(), dblInterval + 40);
 });
 v.addEventListener('dblclick', () => {
   clearTimeout(clickTimer);
@@ -500,7 +515,13 @@ seek.addEventListener('input', () => {
   if (isFinite(v.duration)) v.currentTime = seek.value / 1000 * v.duration;
   fill(seek); cur.textContent = fmt(v.currentTime);
 });
-seek.addEventListener('change', () => { seeking = false; syncTime() });
+function endSeek() {
+  if (seeking) { seeking = false; syncTime() }
+  seek.blur();
+}
+seek.addEventListener('pointerup', endSeek);
+seek.addEventListener('change', endSeek);
+document.addEventListener('pointerup', () => { if (seeking) endSeek() });
 v.addEventListener('loadedmetadata', syncTime);
 v.addEventListener('durationchange', syncTime);
 v.addEventListener('timeupdate', syncTime);

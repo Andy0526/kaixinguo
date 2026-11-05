@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/beilunyang/openhongguo/sdk/model"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -34,8 +35,11 @@ func TestPlayerTheater(t *testing.T) {
 	if !a.fullscreen || !a.theaterShown || a.panelOpen {
 		t.Fatalf("theater: full screen %v, shown %v, panel open %v", a.fullscreen, a.theaterShown, a.panelOpen)
 	}
-	if !tt.HasText("退出影院") {
-		t.Fatalf("no theater button in %q", tt.Texts())
+	if !tt.HasText("退出影院") || !tt.HasText("选集") {
+		t.Fatalf("no theater controls in %q", tt.Texts())
+	}
+	if tt.HasText("右侧边缘") {
+		t.Fatal("the edge sensor is a named control")
 	}
 
 	// The pointer near the right edge brings the episodes out, and
@@ -141,6 +145,18 @@ func TestPlayerDoubleClickTheater(t *testing.T) {
 	}
 }
 
+// Controls belong to the player, not to the episode's page: between two
+// episodes the page still names the old one, and its theater click must
+// still work.
+func TestTheaterEventWithoutTheCurrentEpisode(t *testing.T) {
+	a := testApp(t)
+	a.cur = &playback{seriesID: "1", number: 2, gen: 1}
+	a.onPlayerEvent(url.Values{"type": {"theater"}, "ep": {"e1"}})
+	if !a.fullscreen {
+		t.Fatal("the theater click from the old episode was dropped")
+	}
+}
+
 // The player's controls are the app's bottom bar, not the video's native
 // ones, which put the small window and full screen buttons over the picture.
 func TestPlayerControlsAreTheBottomBar(t *testing.T) {
@@ -161,8 +177,8 @@ func TestTitleBarButtonsClearOfTrafficLights(t *testing.T) {
 	tt := ui.NewTester(a.view, 1180, 760)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 80})
 	tt.Advance(time.Second)
-	if r, ok := tt.Find("返回"); !ok || r.X < 80 {
-		t.Fatalf("the series' back button at %v, under the traffic lights", r)
+	if r, ok := tt.Find("返回"); !ok || r.X < 230 || r.X > 250 {
+		t.Fatalf("the series' back button at %v, not at the content's margin", r)
 	}
 
 	a.cur = &playback{seriesID: "1", number: 1, gen: 1}
@@ -190,5 +206,141 @@ func TestTheaterDrawerOnTheRight(t *testing.T) {
 	}
 	if c, ok := tt.Find("收起选集"); !ok || c.X < 1100 {
 		t.Fatalf("the close button at %v, not in the drawer", c)
+	}
+}
+
+// A guide on the player must not swallow the app's search shortcut on the
+// pages before it.
+func TestSearchShortcutOutsideThePlayerTour(t *testing.T) {
+	a := testApp(t)
+	a.playerTutorialOn = true
+	tt := ui.NewTester(a.view, 1180, 760)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 80})
+	tt.Advance(time.Second)
+
+	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Type("abc")
+	tt.Advance(time.Second)
+	if a.query != "abc" {
+		t.Fatalf("search query %q after Cmd-F", a.query)
+	}
+}
+
+// Full screen opened before the player stays after it closes; only the
+// full screen the theater entered is the theater's to leave.
+func TestLeavingPlayerKeepsUserFullScreen(t *testing.T) {
+	a := testApp(t)
+	a.fullscreen = true
+	a.cur = &playback{seriesID: "1", number: 1, gen: 1}
+	a.router.Push("/play/1")
+	tt := ui.NewTester(a.view, 1180, 760)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 80})
+	tt.Advance(time.Second)
+
+	click(t, tt, "退出播放")
+	if !a.fullscreen {
+		t.Fatal("leaving the player left the viewer's full screen")
+	}
+	if got := a.router.Path(); got != "/discover" {
+		t.Fatalf("at %q after leaving the player", got)
+	}
+}
+
+// The theater's full screen, on the other hand, leaves with the player.
+func TestLeavingPlayerLeavesTheTheaterFullScreen(t *testing.T) {
+	a, tt := playerApp(t)
+	click(t, tt, "影院")
+	click(t, tt, "退出播放")
+	if a.fullscreen {
+		t.Fatal("the theater's full screen stayed after leaving the player")
+	}
+}
+
+// The drawer can still be opened when an episode failed and its message
+// layer covers the video, and the toolbar names the same action.
+func TestTheaterEpisodesWithFailedEpisode(t *testing.T) {
+	a, tt := playerApp(t)
+	click(t, tt, "影院")
+	a.cur.state, a.cur.msg = playFailed, "视频加载失败，请重试"
+	tt.Advance(time.Second)
+
+	tt.Move(1170, 380)
+	tt.Advance(time.Second)
+	if !a.panelOpen {
+		t.Fatal("the failed episode keeps the drawer closed")
+	}
+	tt.Move(600, 380)
+	tt.Advance(time.Second)
+	if a.panelOpen {
+		t.Fatal("the drawer stays after the pointer left it")
+	}
+	if tt.HasText("收起选集") {
+		t.Fatalf("the drawer overlay is still there: %q", tt.Texts())
+	}
+	if !tt.HasText("选集") {
+		t.Fatalf("the theater toolbar has no episodes button: %q", tt.Texts())
+	}
+	if err := tt.Click("选集"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	if !a.panelOpen {
+		t.Fatal("the episodes button did not open the drawer")
+	}
+}
+
+// A series too long for one select still changes parts inside the drawer;
+// the choices stay in the panel, so it does not close under the pointer.
+func TestTheaterPartPickerStaysInDrawer(t *testing.T) {
+	a := testApp(t)
+	sp := a.series["1"]
+	sp.episodes = nil
+	for i := 1; i <= 700; i++ {
+		sp.episodes = append(sp.episodes, model.Episode{ID: "e" + itoa(i), SeriesID: "1", Number: i, Playable: true})
+	}
+	sp.series.EpisodeCount = 700
+	a.cur = &playback{seriesID: "1", number: 1, gen: 1}
+	a.router.Push("/play/1")
+	tt := ui.NewTester(a.view, 1180, 760)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 80})
+	tt.Advance(time.Second)
+	click(t, tt, "影院")
+	tt.Move(1170, 380)
+	tt.Advance(time.Second)
+	if !a.panelOpen {
+		t.Fatal("the drawer is not open")
+	}
+	for _, want := range []string{"1–100", "601–700"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no part %q in %q", want, tt.Texts())
+		}
+	}
+	if err := tt.Click("601–700"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	if !a.panelOpen || sp.part != 6 {
+		t.Fatalf("part %d, drawer open %v after choosing 601–700", sp.part, a.panelOpen)
+	}
+}
+
+// Opening the drawer brings the episode playing into view, even when the
+// side panel already remembered it.
+func TestDrawerRevealsCurrentEpisode(t *testing.T) {
+	a := testApp(t)
+	a.cur = &playback{seriesID: "1", number: 87, gen: 1}
+	a.router.Push("/play/1")
+	tt := ui.NewTester(a.view, 1180, 760)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 80})
+	tt.Advance(time.Second)
+	click(t, tt, "影院")
+	tt.Move(1170, 380)
+	tt.Advance(time.Second)
+	if !a.panelOpen {
+		t.Fatal("the drawer is not open")
+	}
+	r, ok := tt.Find("第 87 集")
+	if !ok || r.Y < 0 || r.Y > 760 || r.X < 880 {
+		t.Fatalf("episode 87 at %v, not in the drawer", r)
 	}
 }

@@ -75,7 +75,7 @@ func TestResume(t *testing.T) {
 	a.router.Push("/series/1")
 	tt := ui.NewTester(a.view, 1180, 760)
 	tt.Advance(1e9)
-	if !tt.HasText("最近观看") || !tt.HasText("继续看第 7 集") {
+	if !tt.HasText("最近播放") || !tt.HasText("继续看第 7 集") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	id, n, start, _ := a.resumePoint(a.series["1"])

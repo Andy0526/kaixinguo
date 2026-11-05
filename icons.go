@@ -11,6 +11,7 @@ var (
 	iconChart    = icon(`<path d="M3.5 13.5v-5M8 13.5v-11M12.5 13.5v-7.5"/>`)
 	iconCalendar = icon(`<rect x="2" y="3.2" width="12" height="10.8" rx="2.2"/><path d="M2 6.8h12M5.3 1.8v2.6M10.7 1.8v2.6"/>`)
 	iconClock    = icon(`<circle cx="8" cy="8" r="6"/><path d="M8 4.9V8l2.1 1.5"/>`)
+	iconCheck    = icon(`<path d="m3.4 8.3 2.8 2.8 6.4-6.4" stroke-width="1.8"/>`)
 	iconBack     = icon(`<path d="M9.8 3.2 5 8l4.8 4.8" stroke-width="1.7"/>`)
 	iconPlay     = icon(`<path d="M5 3.1v9.8a.6.6 0 0 0 .92.5l7.7-4.9a.6.6 0 0 0 0-1L5.92 2.6A.6.6 0 0 0 5 3.1z" fill="currentColor" stroke="none"/>`)
 	iconLock     = icon(`<rect x="3.5" y="7" width="9" height="7" rx="1.6"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/>`)

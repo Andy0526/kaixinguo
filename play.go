@@ -89,6 +89,9 @@ func (a *app) play(seriesID string, n int, start float64) {
 	}
 	a.ensureWebView()
 	a.evalJS("kx.stop()")
+	if a.playerTutorialOn {
+		a.evalJS("kx.setHold(true)") // before the episode resolves and plays
+	}
 	sp := a.seriesPage(seriesID)
 	if sp.series == nil {
 		a.cur.pending = true // fillPending starts it
@@ -201,6 +204,18 @@ func (a *app) onPlayerEvent(q url.Values) {
 		return
 	}
 	sp := a.series[p.seriesID]
+	// Controls belong to the player, not the episode that sent them:
+	// between stop and the next play the page still names the old one.
+	switch q.Get("type") {
+	case "theater":
+		a.toggleTheater()
+		return
+	case "pip":
+		if a.web != nil {
+			a.web.Page().TogglePictureInPicture()
+		}
+		return
+	}
 	ep, _ := sp.episode(p.number)
 	if id := q.Get("ep"); id != "" && id != ep.ID {
 		return // an episode that played before
@@ -232,12 +247,6 @@ func (a *app) onPlayerEvent(q url.Values) {
 		a.step(1)
 	case "prev":
 		a.step(-1)
-	case "pip":
-		if a.web != nil {
-			a.web.Page().TogglePictureInPicture()
-		}
-	case "theater":
-		a.toggleTheater()
 	case "error":
 		p.state, p.msg = playFailed, "视频加载失败，请重试"
 		delete(a.futures, ep.ID)
@@ -248,17 +257,49 @@ func (a *app) recordWatch(sp *seriesPage, n int, pos, dur float64, finished bool
 	if sp == nil || sp.series == nil {
 		return
 	}
-	a.hist.record(watch{
-		SeriesID: sp.id, Title: sp.series.Title, Cover: sp.series.CoverURL,
-		Episode: n, Position: pos, Duration: dur, Total: len(sp.episodes), Finished: finished,
-	})
+	w, _ := a.hist.get(sp.id)
+	w.SeriesID, w.Title, w.Cover = sp.id, sp.series.Title, sp.series.CoverURL
+	w.Episode, w.Position, w.Duration, w.Total = n, pos, dur, len(sp.episodes)
+	w.Finished = finished
+	w.Want = false
+	// The store writes snapshots in the background; copy the map so this
+	// update cannot race that write or change a snapshot after the fact.
+	eps := make(map[int]episodeWatch, len(w.Episodes)+1)
+	for i, ew := range w.Episodes {
+		eps[i] = ew
+	}
+	w.Episodes = eps
+	e := w.Episodes[n]
+	e.Position = pos
+	if dur > 0 {
+		e.Duration = dur // a start of the episode has no duration yet
+	}
+	if finished || dur > 0 && pos >= dur*0.98 {
+		e.Finished = true
+	}
+	w.Episodes[n] = e
+	// A whole series is done when the last episode ends, or when every
+	// episode has been watched.
+	if finished && w.Total > 0 && n >= w.Total {
+		w.Done = true
+	}
+	watched := 0
+	for _, ew := range w.Episodes {
+		if ew.Finished {
+			watched++
+		}
+	}
+	if w.Total > 0 && watched >= w.Total {
+		w.Done = true
+	}
+	a.hist.record(w)
 }
 
 // resumePoint is where to go on from: the series (this season or the
 // next), the episode and the second.
 func (a *app) resumePoint(sp *seriesPage) (id string, n int, start float64, label string) {
 	w, ok := a.hist.get(sp.id)
-	if !ok || len(sp.episodes) == 0 {
+	if !ok || w.Episode <= 0 || len(sp.episodes) == 0 {
 		return sp.id, 1, 0, "播放第 1 集"
 	}
 	if w.Finished {
@@ -302,8 +343,9 @@ func (a *app) ensureWebView() {
 	web.Page().OnDidFinishLoad(func() {
 		a.update(func() {
 			a.webReady = true
-			if js := a.pendingJS; js != "" {
-				a.pendingJS = ""
+			pending := a.pendingJS
+			a.pendingJS = nil
+			for _, js := range pending {
 				a.evalJS(js)
 			}
 		})
@@ -316,7 +358,7 @@ func (a *app) evalJS(js string) {
 		return
 	}
 	if !a.webReady {
-		a.pendingJS = js
+		a.pendingJS = append(a.pendingJS, js)
 		return
 	}
 	select {

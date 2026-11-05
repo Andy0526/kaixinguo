@@ -38,11 +38,12 @@ type app struct {
 	tutorialStep int
 
 	// The sidebar.
-	query       string
-	searchField ui.Handle
-	section     string // the sidebar's page the page shown belongs to
-	recentOpen  bool
-	sideShown   float32
+	query        string
+	searchField  ui.Handle
+	section      string // the sidebar's page the page shown belongs to
+	recentOpen   bool
+	recentFilter string // recent list filter: "", want, watching or done
+	sideShown    float32
 
 	// The catalog.
 	home         *feed
@@ -67,16 +68,19 @@ type app struct {
 
 	// The theater: the player filling the screen, its episodes a drawer
 	// that follows the pointer to the right edge.
-	fullscreen      bool
-	theaterShown    bool
-	panelOpen       bool
-	panelSuppressed bool // closed by hand, until the pointer leaves
-	panelJustClosed bool // the overlay is a frame behind the close
+	fullscreen        bool
+	theaterFullscreen bool // the theater entered full screen, so leaving may leave it
+	theaterShown      bool
+	panelOpen         bool
+	panelSuppressed   bool // closed by hand, until the pointer leaves
+	panelJustClosed   bool // the overlay is a frame behind the close
+	panelReveal       bool // the next drawer scrolls to the episode playing
+	panelPinned       bool // opened from the toolbar; stays until entered or closed
 
 	// The player's first entry shows its own small tour.
-	playerTutorialOn     bool
-	playerTutorialStep   int
-	playerTutorialPaused bool
+	playerTutorialOn   bool
+	playerTutorialStep int
+	playerTutorialHeld bool
 
 	// The appearance to go back to when the player closes.
 	playerTheme mygo.ThemeSource
@@ -84,9 +88,10 @@ type app struct {
 	// The player's web view.
 	web       *mygo.WebView
 	webReady  bool
-	pendingJS string
+	pendingJS []string    // what the page runs once it has loaded
 	js        chan string // what the page runs, in order
 	onPlayer  bool
+	playerSet bool // the player page has its system settings
 }
 
 func newApp(dataDir, cacheDir string) *app {
@@ -170,7 +175,10 @@ func main() {
 		a.win.OnLeaveFullScreen(func() {
 			a.win.Update(func() {
 				a.fullscreen = false
+				a.theaterFullscreen = false
 				a.panelOpen = false
+				a.panelReveal = false
+				a.panelPinned = false
 				a.theaterShown = false
 			})
 		})

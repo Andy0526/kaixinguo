@@ -48,8 +48,8 @@ func (a *app) tutorialNext() {
 func (a *app) finishPlayerTutorial() {
 	a.playerTutorialOn = false
 	a.playerTutorialStep = 0
-	a.playerTutorialPaused = false
-	a.evalJS("kx.resume()")
+	a.playerTutorialHeld = false
+	a.evalJS("kx.setHold(false)")
 	writeMarker(a.dataDir, "player-tutorial")
 }
 
@@ -76,7 +76,7 @@ var tutorialSteps = []tutorialStep{
 	},
 	{
 		title: "收藏和续播",
-		body:  "剧集页点「收藏」，或在卡片上右键；看过的剧会出现在「最近观看」，点一下接着看。",
+		body:  "剧集页点「收藏」，或在卡片上右键；看过的剧会出现在「最近播放」，点一下接着看。",
 	},
 	{
 		title: "双击进出影院",
