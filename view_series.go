@@ -224,7 +224,7 @@ func (a *app) wantButton(c *ui.Context, sp *seriesPage) {
 	if !ok {
 		w = watch{SeriesID: sp.id, Title: sp.series.Title, Cover: sp.series.CoverURL}
 	}
-	w.Want = true
+	w.Want, w.Done, w.Episode = true, false, 0
 	w.Total = len(sp.episodes)
 	a.hist.record(w)
 }
