@@ -1,0 +1,48 @@
+name: 问题反馈
+description: 应用出错、播放失败、界面不对
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢反馈！如果是列表全空、所有剧都播不了，多半是红果接口变了，可以先看看 [openhongguo](https://github.com/beilunyang/openhongguo/issues) 有没有人报过。
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 哪里不对？有截图更好。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么复现
+      description: 一步步写出来。和某部剧有关的话，写上剧名和第几集。
+      placeholder: |
+        1. 搜索「……」
+        2. 打开第 3 集
+        3. ……
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 开心果版本
+      description: 「开心果」菜单 › 关于开心果
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 版本和芯片
+      placeholder: "macOS 26.1，Apple M3"
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: 调试日志
+      description: |
+        在终端运行 `KX_DEBUG=1 /Applications/开心果.app/Contents/MacOS/开心果`，复现问题后把输出贴在这里。
+      render: text

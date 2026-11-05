@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 接口或 SDK 的问题
+    url: https://github.com/beilunyang/openhongguo/issues
+    about: 列表全空、所有剧都播不了，多半是红果接口变了，请到 openhongguo 反馈。
