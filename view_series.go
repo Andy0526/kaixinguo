@@ -194,8 +194,12 @@ func (a *app) wantButton(c *ui.Context, sp *seriesPage) {
 	if want {
 		label = "已想看"
 	}
+	action := "加入最近播放的想看"
+	if want {
+		action = "从最近播放的想看移除"
+	}
 	b := ui.ButtonBase(c.Key("want")).Padding(8, 18, 8, 15).Radius(9).Label(label).
-		Tooltip("加入最近播放的想看").Cursor(ui.CursorPointer)
+		Tooltip(action).Cursor(ui.CursorPointer)
 	switch {
 	case b.Pressed():
 		b.Background(t.Text.Alpha(0.2))
@@ -297,8 +301,8 @@ func (a *app) playSeason(id string) {
 }
 
 // partPicker chooses which hundred episodes show, for long series. The
-// drawer keeps the choices in a row: a select's popup would be outside
-// the panel and close it when the pointer went to an option.
+// drawer wraps the choices in the panel: a select's popup would be
+// outside it and close it when the pointer went to an option.
 func (a *app) partPicker(c *ui.Context, sp *seriesPage, inline bool) {
 	n := len(sp.episodes)
 	if n <= episodesPerPart {
