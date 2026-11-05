@@ -27,6 +27,9 @@ type card struct {
 	Cover string `json:"cover,omitempty"`
 	Sub   string `json:"sub,omitempty"`  // the line under the title
 	Rank  int    `json:"rank,omitempty"` // its place on a chart
+	// Episodes is how many episodes the series has, when the page that
+	// listed it said: Sub may say something else, as a chart's score.
+	Episodes int `json:"episodes,omitempty"`
 }
 
 // page is what a feed's fetch returns.
@@ -180,10 +183,11 @@ func (a *app) rankFetcher(content, board string) fetcher {
 				continue // an actor's row
 			}
 			sub := it.Score
-			if sub == "" && it.EpisodeCount > 0 {
-				sub = fmt.Sprintf("%d 集", it.EpisodeCount)
+			if sub == "" {
+				sub = episodeCount(it.EpisodeCount)
 			}
-			out.cards = append(out.cards, card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: sub, Rank: it.Position})
+			out.cards = append(out.cards, card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: sub,
+				Rank: it.Position, Episodes: it.EpisodeCount})
 		}
 		return out, nil
 	}
@@ -201,7 +205,8 @@ func (a *app) newFetcher(date string) fetcher {
 			if !it.Online && it.Note != "" {
 				sub = it.Note
 			}
-			out.cards = append(out.cards, card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: sub})
+			out.cards = append(out.cards, card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: sub,
+				Episodes: it.EpisodeCount})
 		}
 		return out, nil
 	}
@@ -243,6 +248,7 @@ func (a *app) searchFetcher(query string) fetcher {
 						out.cards[i].Cover = s.CoverURL
 						if s.EpisodeCount > 0 {
 							out.cards[i].Sub = episodesLabel(s)
+							out.cards[i].Episodes = s.EpisodeCount
 						}
 					}
 				}
@@ -253,11 +259,16 @@ func (a *app) searchFetcher(query string) fetcher {
 }
 
 func summaryCard(s model.SeriesSummary) card {
-	k := card{ID: s.ID, Title: s.Title, Cover: s.CoverURL}
-	if s.EpisodeCount > 0 {
-		k.Sub = fmt.Sprintf("%d 集", s.EpisodeCount)
+	return card{ID: s.ID, Title: s.Title, Cover: s.CoverURL, Sub: episodeCount(s.EpisodeCount), Episodes: s.EpisodeCount}
+}
+
+// episodeCount is a card's line for a series of n episodes, or nothing
+// when n is unknown.
+func episodeCount(n int) string {
+	if n <= 0 {
+		return ""
 	}
-	return k
+	return fmt.Sprintf("%d 集", n)
 }
 
 func episodesLabel(s *model.Series) string {

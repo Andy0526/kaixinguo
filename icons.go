@@ -14,5 +14,7 @@ var (
 	iconBack     = icon(`<path d="M9.8 3.2 5 8l4.8 4.8" stroke-width="1.7"/>`)
 	iconPlay     = icon(`<path d="M5 3.1v9.8a.6.6 0 0 0 .92.5l7.7-4.9a.6.6 0 0 0 0-1L5.92 2.6A.6.6 0 0 0 5 3.1z" fill="currentColor" stroke="none"/>`)
 	iconLock     = icon(`<rect x="3.5" y="7" width="9" height="7" rx="1.6"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/>`)
+	iconStar     = icon(`<path d="M8 2.1 9.53 5.9l4.08.28-3.14 2.62 1 3.97L8 10.6l-3.47 2.17 1-3.97L2.39 6.18l4.08-.28z"/>`)
+	iconStarOn   = icon(`<path d="M8 2.1 9.53 5.9l4.08.28-3.14 2.62 1 3.97L8 10.6l-3.47 2.17 1-3.97L2.39 6.18l4.08-.28z" fill="currentColor"/>`)
 	iconFlame    = icon(`<path d="M8 14c2.6 0 4.5-1.8 4.5-4.4 0-2.6-1.9-3.9-2.6-6.1-.3 1.4-1 2.2-1.7 2.6C8.2 4.3 7.3 2.8 5.8 2c.3 2.3-2.3 3.9-2.3 7.6C3.5 12.2 5.4 14 8 14z"/>`)
 )

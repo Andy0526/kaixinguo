@@ -11,10 +11,16 @@ import (
 // testApp is an app with a catalog already loaded, which needs no network.
 func testApp(t *testing.T) *app {
 	a := newApp(t.TempDir(), t.TempDir())
+	// Cleanups run last first: the files are written before the
+	// directories are removed.
+	t.Cleanup(func() {
+		a.hist.store.flush()
+		a.favs.store.flush()
+	})
 	a.home = newFeed(nil)
 	a.home.add(page{cards: []card{
-		{ID: "1", Title: "浅浅归聿", Sub: "124 集"},
-		{ID: "2", Title: "大唐第一军火商", Sub: "521 集"},
+		{ID: "1", Title: "浅浅归聿", Sub: "124 集", Episodes: 124},
+		{ID: "2", Title: "大唐第一军火商", Sub: "521 集", Episodes: 521},
 	}})
 	a.home.started, a.home.more = true, false
 	eps := []model.Episode{}

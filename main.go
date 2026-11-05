@@ -27,6 +27,7 @@ type app struct {
 	client *sdk.Client
 	covers *covers
 	hist   *history
+	favs   *favorites
 	proxy  *proxy
 
 	cacheDir string
@@ -50,6 +51,8 @@ type app struct {
 	hot          *model.HotSearch
 	hotLoading   bool
 	hotErr       error
+	favFeed      *feed
+	favRev       int // the favorites' rev favFeed was built from
 
 	// Series and playback.
 	series  map[string]*seriesPage
@@ -77,6 +80,7 @@ func newApp(dataDir, cacheDir string) *app {
 		series:     map[string]*seriesPage{},
 		futures:    map[string]*future{},
 		hist:       loadHistory(dataDir),
+		favs:       loadFavorites(dataDir),
 	}
 	a.covers = newCovers(filepath.Join(cacheDir, "covers"), a.update)
 	a.home = newFeed(a.discover)
@@ -111,6 +115,11 @@ func main() {
 	if a.proxy, err = newProxy(func(q url.Values) { a.update(func() { a.onPlayerEvent(q) }) }); err != nil {
 		log.Fatal(err)
 	}
+	// What was saved last, as the window closed, reaches the disk.
+	mygo.App.OnQuit(func() {
+		a.hist.store.flush()
+		a.favs.store.flush()
+	})
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:          "开心果",

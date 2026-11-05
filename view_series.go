@@ -81,13 +81,13 @@ func (a *app) seriesBody(c *ui.Context, sp *seriesPage) {
 							TextColor(t.Text.Alpha(0.86)).Selectable()
 					}
 					ui.Row(c).Gap(10).Margin(10, 0, 0, 0).Children(func() {
-						if len(sp.episodes) == 0 {
-							return
+						if len(sp.episodes) > 0 {
+							id, n, start, label := a.resumePoint(sp)
+							if a.playButton(c, label) {
+								a.play(id, n, start)
+							}
 						}
-						id, n, start, label := a.resumePoint(sp)
-						if a.playButton(c, label) {
-							a.play(id, n, start)
-						}
+						a.favButton(c, sp)
 					})
 				})
 			})
@@ -138,6 +138,45 @@ func (a *app) playButton(c *ui.Context, label string) bool {
 		})
 	})
 	return b.Clicked()
+}
+
+// favButton saves the series, or drops it when it is saved already.
+func (a *app) favButton(c *ui.Context, sp *seriesPage) {
+	t := c.Theme()
+	saved := a.favs.has(sp.id)
+	label := "收藏"
+	if saved {
+		label = "已收藏"
+	}
+	// The label names the action, not the state, and says which: the
+	// sidebar has a 收藏 of its own.
+	action := favLabel(saved) + "这部剧"
+	b := ui.ButtonBase(c.Key("fav")).Padding(8, 18, 8, 15).Radius(9).Label(action).
+		Tooltip(action).Cursor(ui.CursorPointer)
+	switch {
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.2))
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.14))
+	default:
+		b.Background(t.Text.Alpha(0.09))
+	}
+	b.Children(func() {
+		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
+			ic := iconStar
+			if saved {
+				ic = iconStarOn
+			}
+			ui.Icon(c, ic).Size(14, 14)
+			ui.Text(c, label).FontSize(14).FontWeight(600)
+		})
+	})
+	if b.Clicked() {
+		// Saved as the grids show it, so the 收藏 grid matches the others.
+		k := summaryCard(sp.series.SeriesSummary)
+		k.ID = sp.id
+		a.favs.toggle(favOf(k))
+	}
 }
 
 func (a *app) episodeGrid(c *ui.Context, sp *seriesPage) {

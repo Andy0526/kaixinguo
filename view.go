@@ -31,7 +31,7 @@ func (a *app) view(c *ui.Context) {
 	}
 	a.onPlayer = onPlayer
 	switch path {
-	case "/discover", "/rank", "/new", "/search":
+	case "/discover", "/rank", "/new", "/search", "/favorites":
 		a.section = path
 	}
 
@@ -64,6 +64,9 @@ func (a *app) view(c *ui.Context) {
 			case r.Match("/search"):
 				r.Title("搜索")
 				a.searchPage(c, r.Query("q"))
+			case r.Match("/favorites"):
+				r.Title("收藏")
+				a.favoritesPage(c)
 			case r.Match("/series/{id}"):
 				r.Title("详情")
 				a.seriesView(c, r.Param("id"))
@@ -104,6 +107,13 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 			ui.SidebarItem(c, "/rank", iconChart, "排行榜")
 			ui.SidebarItem(c, "/new", iconCalendar, "新剧上线")
 			ui.SidebarItem(c, "/search", iconFlame, "热搜")
+		})
+		ui.SidebarSection(c, "我的", nil, func() {
+			ui.SidebarItem(c, "/favorites", iconStar, "收藏").Children(func() {
+				if n := len(a.favs.list); n > 0 {
+					ui.Textf(c, "%d", n).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+				}
+			})
 		})
 		if len(a.hist.list) > 0 {
 			ui.SidebarSection(c, "最近观看", &a.recentOpen, func() {
@@ -210,15 +220,24 @@ func (a *app) card(c *ui.Context, k card) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key(k.ID)).Fill().Label(k.Title).Cursor(ui.CursorPointer)
 	hover := b.Hovered()
+	saved := a.favs.has(k.ID)
+	b.ContextMenu(func(m *ui.Menu) {
+		if m.Item(favLabel(saved)).Chosen() {
+			a.favs.toggle(favOf(k))
+		}
+	})
 	b.Children(func() {
 		ui.Column(c).Fill().Padding(4, cellPadX, 14, cellPadX).Gap(9).Children(func() {
 			a.poster(c, k.Cover, 10, hover).Grow(1).MinHeight(0)
 			ui.Column(c).Gap(2).Children(func() {
-				ui.Row(c).Gap(6).Children(func() {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					if k.Rank > 0 {
 						ui.Textf(c, "%d", k.Rank).FontSize(13).Bold().TextColor(t.TextMuted).FontFeatures("tnum")
 					}
 					ui.Text(c, k.Title).FontSize(13).FontWeight(600).SingleLine().Grow(1).MinWidth(0)
+					if saved {
+						ui.Icon(c, iconStarOn).Size(11, 11).Shrink(0).TextColor(t.TextMuted.Alpha(0.7)).Tooltip("已收藏")
+					}
 				})
 				ui.Text(c, k.Sub).FontSize(12).TextColor(t.TextMuted).SingleLine()
 			})
@@ -442,7 +461,8 @@ func (a *app) hotPage(c *ui.Context) {
 					ui.Text(c, b.Name).FontSize(17).Bold().Margin(14, cellPadX, 10, cellPadX)
 					ui.Row(c).Wrap().Children(func() {
 						for _, it := range b.Items {
-							k := card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: it.SearchScore, Rank: it.Position}
+							k := card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: it.SearchScore,
+								Rank: it.Position, Episodes: it.EpisodeCount}
 							if k.Sub == "" {
 								k.Sub = it.Heat
 							}
@@ -465,6 +485,29 @@ func (a *app) loadHot() {
 		h, err := a.client.HotSearch(ctx)
 		a.update(func() { a.hot, a.hotErr, a.hotLoading = h, err, false })
 	}()
+}
+
+// favoritesPage is the grid of saved series. It has no fetcher: the grid
+// is rebuilt from the list whenever that changes.
+func (a *app) favoritesPage(c *ui.Context) {
+	if a.favFeed == nil || a.favRev != a.favs.rev {
+		f := newFeed(nil)
+		f.started = true
+		if a.favFeed != nil {
+			f.grid = a.favFeed.grid // stay where the viewer scrolled to
+		}
+		f.add(page{cards: a.favs.cards()})
+		a.favFeed, a.favRev = f, a.favs.rev
+	}
+	a.gridPage(c, "收藏", a.favFeed, nil, nil, 0, "还没有收藏。在剧集页点「收藏」，想看的就存下来。")
+}
+
+// favLabel names the action on a series that is, or is not, saved.
+func favLabel(saved bool) string {
+	if saved {
+		return "取消收藏"
+	}
+	return "收藏"
 }
 
 func hairline(t *ui.Theme) ui.Color    { return t.Text.Alpha(0.1) }

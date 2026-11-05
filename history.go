@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"time"
 )
@@ -20,20 +18,19 @@ type watch struct {
 	Updated  time.Time `json:"updated"`
 }
 
-// history keeps the series watched, the latest first, in a file. It
-// belongs to the main thread; it writes the file on a goroutine.
+// historyMax is how many series the history keeps.
+const historyMax = 200
+
+// history keeps the series watched, the latest first, in history.json. It
+// belongs to the main thread.
 type history struct {
-	path string
-	list []watch
-	save chan []watch
+	store *store[watch]
+	list  []watch
 }
 
 func loadHistory(dir string) *history {
-	h := &history{path: filepath.Join(dir, "history.json"), save: make(chan []watch, 1)}
-	if data, err := os.ReadFile(h.path); err == nil {
-		_ = json.Unmarshal(data, &h.list)
-	}
-	go h.writer()
+	h := &history{}
+	h.store, h.list = openStore[watch](filepath.Join(dir, "history.json"))
 	return h
 }
 
@@ -55,28 +52,9 @@ func (h *history) record(w watch) {
 			list = append(list, o)
 		}
 	}
-	if len(list) > 200 {
-		list = list[:200]
+	if len(list) > historyMax {
+		list = list[:historyMax]
 	}
 	h.list = list
-	snapshot := append([]watch(nil), list...)
-	// Only the latest snapshot matters.
-	select {
-	case <-h.save:
-	default:
-	}
-	h.save <- snapshot
-}
-
-func (h *history) writer() {
-	for list := range h.save {
-		data, err := json.Marshal(list)
-		if err != nil {
-			continue
-		}
-		tmp := h.path + ".tmp"
-		if os.WriteFile(tmp, data, 0o644) == nil {
-			_ = os.Rename(tmp, h.path)
-		}
-	}
+	h.store.put(list)
 }
