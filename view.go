@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/beilunyang/openhongguo/sdk/model"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 )
@@ -28,6 +29,17 @@ func (a *app) view(c *ui.Context) {
 	onPlayer := strings.HasPrefix(path, "/play/")
 	if a.onPlayer && !onPlayer {
 		a.evalJS("kx.pause()") // left the player
+		a.panelOpen = false
+		a.panelSuppressed = false
+		a.panelJustClosed = false
+		a.theaterShown = false
+		if a.fullscreen {
+			a.setFullScreen(false) // the theater is the player's, not the page's
+		}
+		a.playerAppearance(false)
+	}
+	if !a.onPlayer && onPlayer {
+		a.playerAppearance(true)
 	}
 	a.onPlayer = onPlayer
 	switch path {
@@ -77,12 +89,23 @@ func (a *app) view(c *ui.Context) {
 		}).Grow(1).MinWidth(0).Background(t.Background)
 	})
 
-	c.OnShortcut(ui.Cmd, ui.KeyF, func() {
-		if onPlayer {
-			a.router.Back()
-		}
-		a.searchField.Focus(c)
-	})
+	if !a.tutorialOn && !a.playerTutorialOn {
+		c.OnShortcut(ui.Cmd, ui.KeyF, func() {
+			if onPlayer {
+				a.leavePlayer()
+			}
+			a.searchField.Focus(c)
+		})
+	}
+	if onPlayer && !a.tutorialOn && !a.playerTutorialOn {
+		// The player's keys are the window's too, so that they go on
+		// working when the focus left its page, as it does when the
+		// theater's episodes close.
+		a.playerShortcuts(c)
+	}
+	if a.tutorialOn {
+		a.tutorial(c)
+	}
 }
 
 func (a *app) sidebar(c *ui.Context, vibrant bool) {
@@ -530,6 +553,31 @@ func b2f(b bool) float32 {
 		return 1
 	}
 	return 0
+}
+
+// playerAppearance draws the window's chrome dark while the player shows,
+// so that the title bar that comes down with the menu bar in full screen is
+// black rather than the system's white. The player's page is dark already;
+// the rest of the app takes its appearance back afterwards.
+func (a *app) playerAppearance(on bool) {
+	if a.win == nil {
+		return // no window to draw, as in the tester
+	}
+	if on {
+		a.playerTheme = mygo.Theme.Source()
+		mygo.Theme.SetSource(mygo.ThemeDark)
+		return
+	}
+	if a.playerTheme != "" {
+		mygo.Theme.SetSource(a.playerTheme)
+		a.playerTheme = ""
+	}
+}
+
+// titleBarLeft is where a title bar control goes, clear of the window's
+// traffic lights (and of the screen's edge in full screen).
+func titleBarLeft(c *ui.Context, gap float32) float32 {
+	return max(c.TitleBar().Left+gap, 16)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

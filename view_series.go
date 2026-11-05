@@ -28,16 +28,17 @@ func (a *app) seriesView(c *ui.Context, id string) {
 			a.seriesBody(c, sp)
 		}
 		ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(titleBarHeight).DragWindow()
-		a.backButton(c, 18)
+		a.backButton(c)
 	})
 }
 
-// backButton is a round button of glass that goes back.
-func (a *app) backButton(c *ui.Context, left float32) {
+// backButton is a round button of glass that goes back, clear of the
+// window's traffic lights.
+func (a *app) backButton(c *ui.Context) {
 	if !a.router.CanGoBack() {
 		return
 	}
-	b := ui.ButtonBase(c.Key("back")).Absolute().Top((titleBarHeight-30)/2).Left(left).Size(30, 30).Radius(15).
+	b := ui.ButtonBase(c.Key("back")).Absolute().Top((titleBarHeight-30)/2).Left(titleBarLeft(c, 10)).Size(30, 30).Radius(15).
 		Center().Material(glass.Glass{Interactive: true}).Label("返回").Tooltip("返回").Cursor(ui.CursorPointer)
 	b.Children(func() { ui.Icon(c, iconBack).Size(15, 15) })
 	if b.Clicked() {

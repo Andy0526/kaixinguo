@@ -232,6 +232,12 @@ func (a *app) onPlayerEvent(q url.Values) {
 		a.step(1)
 	case "prev":
 		a.step(-1)
+	case "pip":
+		if a.web != nil {
+			a.web.Page().TogglePictureInPicture()
+		}
+	case "theater":
+		a.toggleTheater()
 	case "error":
 		p.state, p.msg = playFailed, "视频加载失败，请重试"
 		delete(a.futures, ep.ID)

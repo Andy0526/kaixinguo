@@ -332,13 +332,105 @@ const playerHTML = `<!doctype html>
 <style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden;-webkit-user-select:none;cursor:default}
 video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;outline:none}
+#hud{position:fixed;top:64px;left:50%;transform:translateX(-50%);padding:7px 14px;border-radius:9px;
+  background:rgba(18,18,20,.78);color:#fff;font:500 12px/1 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
+  letter-spacing:.02em;opacity:0;transition:opacity .16s ease;pointer-events:none;z-index:3;white-space:nowrap}
+#hud.show{opacity:1}
+#bar{position:fixed;left:12px;right:12px;bottom:12px;height:56px;display:flex;align-items:center;gap:8px;
+  padding:0 12px;border-radius:15px;background:rgba(24,24,26,.82);-webkit-backdrop-filter:blur(22px);
+  backdrop-filter:blur(22px);box-shadow:0 10px 34px rgba(0,0,0,.38);color:#fff;z-index:2;
+  opacity:0;transform:translateY(8px);transition:opacity .18s ease,transform .18s ease;pointer-events:none}
+body.controls #bar{opacity:1;transform:none;pointer-events:auto}
+body:not(.controls){cursor:none}
+#bar .ctl{width:28px;height:28px;flex:none;padding:0;border:0;border-radius:8px;background:transparent;
+  color:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;cursor:pointer}
+#bar .ctl:hover{background:rgba(255,255,255,.12)}
+#bar .ctl:active{background:rgba(255,255,255,.2)}
+#bar .ctl svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#bar .time{min-width:32px;flex:none;text-align:center;color:rgba(255,255,255,.72);
+  font:500 11px/1 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;font-variant-numeric:tabular-nums}
+#play .pause{display:none}
+body.playing #play .play{display:none}
+body.playing #play .pause{display:block}
+body.muted #mute .wave{opacity:.18}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;outline:none;margin:0;
+  background:linear-gradient(to right,rgba(255,255,255,.92) var(--p,0%),rgba(255,255,255,.22) var(--p,0%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4);opacity:0;transition:opacity .12s}
+#bar:hover input[type=range]::-webkit-slider-thumb{opacity:1}
+#seek{flex:1;min-width:50px}
+#vol{width:76px;flex:none}
 </style></head>
-<body><video id="v" controls playsinline preload="auto"></video>
+<body><video id="v" playsinline preload="auto"></video>
+<div id="bar" role="group" aria-label="播放控制">
+  <button id="play" class="ctl" aria-label="播放">
+    <svg class="play" viewBox="0 0 24 24"><path d="M8 5.2v13.6L19 12z" fill="currentColor" stroke="none"/></svg>
+    <svg class="pause" viewBox="0 0 24 24"><path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <span id="cur" class="time">0:00</span>
+  <input id="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度">
+  <span id="dur" class="time">0:00</span>
+  <button id="mute" class="ctl" aria-label="静音">
+    <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path class="wave" d="M16 9.2a4 4 0 0 1 0 5.6M18.6 6.8a7.5 7.5 0 0 1 0 10.4"/></svg>
+  </button>
+  <input id="vol" type="range" min="0" max="1" step="0.01" value="1" aria-label="音量">
+  <button id="pip" class="ctl" aria-label="小窗播放">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.2"/><rect x="12" y="12" width="7.5" height="5.5" rx="1.2" fill="currentColor" stroke="none"/></svg>
+  </button>
+</div>
+<div id="hud"></div>
 <script>
 const v = document.getElementById('v');
-let ep = '', last = 0;
+const hud = document.getElementById('hud');
+const bar = document.getElementById('bar');
+const seek = document.getElementById('seek');
+const vol = document.getElementById('vol');
+const cur = document.getElementById('cur');
+const dur = document.getElementById('dur');
+const playBtn = document.getElementById('play');
+const muteBtn = document.getElementById('mute');
+const pipBtn = document.getElementById('pip');
+let ep = '', last = 0, brightness = 1, hudTimer = 0, hideTimer = 0, seeking = false;
 function send(type, extra) {
   fetch('event?type=' + type + '&ep=' + encodeURIComponent(ep) + (extra || '')).catch(() => {});
+}
+function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)) }
+function fmt(t) {
+  if (!isFinite(t) || t < 0) t = 0;
+  t = Math.floor(t);
+  return Math.floor(t / 60) + ':' + (t % 60 < 10 ? '0' : '') + (t % 60);
+}
+function fill(el) {
+  const lo = +el.min || 0, hi = +el.max || 1;
+  el.style.setProperty('--p', ((+el.value - lo) / (hi - lo) * 100) + '%');
+}
+function syncTime() {
+  if (!seeking && isFinite(v.duration) && v.duration > 0) {
+    seek.value = Math.round(v.currentTime / v.duration * 1000);
+  }
+  fill(seek); fill(vol);
+  cur.textContent = fmt(v.currentTime);
+  dur.textContent = fmt(v.duration);
+}
+function syncVolume() {
+  vol.value = v.muted ? 0 : v.volume;
+  fill(vol);
+  document.body.classList.toggle('muted', v.muted || v.volume === 0);
+}
+function syncPlay() {
+  document.body.classList.toggle('playing', !v.paused);
+  playBtn.setAttribute('aria-label', v.paused ? '播放' : '暂停');
+}
+function showControls() {
+  document.body.classList.add('controls');
+  clearTimeout(hideTimer);
+  if (!v.paused) hideTimer = setTimeout(() => document.body.classList.remove('controls'), 2600);
+}
+function showHud(text) {
+  hud.textContent = text;
+  hud.classList.add('show');
+  clearTimeout(hudTimer);
+  hudTimer = setTimeout(() => hud.classList.remove('show'), 900);
 }
 window.kx = {
   play(src, id, start) {
@@ -349,9 +441,82 @@ window.kx = {
   },
   stop() { v.pause(); v.removeAttribute('src'); v.load(); },
   pause() { v.pause() },
+  resume() { v.play().catch(() => {}) },
   toggle() { v.paused ? v.play() : v.pause() },
   seek(d) { v.currentTime = Math.max(0, v.currentTime + d) },
 };
+// The right half of the video scrolls the volume, the left half its
+// brightness, by a mouse's wheel or a touchpad.
+window.addEventListener('wheel', e => {
+  const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+  if (!v.src || Math.abs(dy) < 0.5) return;
+  e.preventDefault();
+  if (e.clientX >= window.innerWidth / 2) {
+    v.volume = clamp(v.volume - dy / 800, 0, 1);
+    v.muted = v.volume === 0;
+    syncVolume();
+    showHud('音量 ' + Math.round(v.volume * 100) + '%');
+  } else {
+    brightness = clamp(brightness - dy / 1000, 0.25, 1.6);
+    v.style.filter = 'brightness(' + brightness.toFixed(2) + ')';
+    showHud('亮度 ' + Math.round(brightness * 100) + '%');
+  }
+}, {passive: false});
+playBtn.addEventListener('click', () => kx.toggle());
+muteBtn.addEventListener('click', () => {
+  if (v.volume === 0) { v.volume = 1; v.muted = false } else { v.muted = !v.muted }
+  syncVolume();
+});
+pipBtn.addEventListener('click', () => {
+  // The page's own API keeps the click's gesture; Go's toggle is the
+  // fallback for a WebKit that doesn't expose it.
+  if (document.pictureInPictureElement) {
+    document.exitPictureInPicture().catch(() => send('pip'));
+  } else if (v.requestPictureInPicture) {
+    v.requestPictureInPicture().catch(() => send('pip'));
+  } else {
+    send('pip');
+  }
+});
+vol.addEventListener('input', () => {
+  v.volume = +vol.value;
+  v.muted = v.volume === 0;
+  syncVolume();
+});
+// A click on the picture plays or pauses it, as the video's controls do;
+// a double click, held back until the second click is known, changes to
+// or from the theater instead.
+let clickTimer = 0;
+v.addEventListener('click', () => {
+  clearTimeout(clickTimer);
+  clickTimer = setTimeout(() => kx.toggle(), 240);
+});
+v.addEventListener('dblclick', () => {
+  clearTimeout(clickTimer);
+  send('theater');
+});
+seek.addEventListener('input', () => {
+  seeking = true;
+  if (isFinite(v.duration)) v.currentTime = seek.value / 1000 * v.duration;
+  fill(seek); cur.textContent = fmt(v.currentTime);
+});
+seek.addEventListener('change', () => { seeking = false; syncTime() });
+v.addEventListener('loadedmetadata', syncTime);
+v.addEventListener('durationchange', syncTime);
+v.addEventListener('timeupdate', syncTime);
+v.addEventListener('volumechange', syncVolume);
+v.addEventListener('play', () => { syncPlay(); showControls() });
+v.addEventListener('pause', () => { syncPlay(); showControls() });
+window.addEventListener('mousemove', e => {
+  if (e.target && e.target.closest && e.target.closest('#bar')) {
+    clearTimeout(hideTimer);
+    document.body.classList.add('controls');
+    return;
+  }
+  showControls();
+});
+bar.addEventListener('mouseenter', () => { clearTimeout(hideTimer); document.body.classList.add('controls') });
+bar.addEventListener('mouseleave', () => { clearTimeout(hideTimer); if (!v.paused) hideTimer = setTimeout(() => document.body.classList.remove('controls'), 1800) });
 v.addEventListener('ended', () => send('ended'));
 v.addEventListener('playing', () => send('playing'));
 v.addEventListener('waiting', () => send('waiting'));
@@ -366,10 +531,12 @@ v.addEventListener('pause', () => {
   if (v.currentTime > 0) send('progress', '&t=' + v.currentTime.toFixed(1) + '&d=' + (v.duration || 0).toFixed(1));
 });
 document.addEventListener('keydown', e => {
+  if (e.target && e.target.closest && e.target.closest('#bar')) return;
   if (e.key === ' ') { e.preventDefault(); kx.toggle() }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); kx.seek(-5) }
   else if (e.key === 'ArrowRight') { e.preventDefault(); kx.seek(5) }
   else if (e.key === 'ArrowDown') { e.preventDefault(); send('next') }
   else if (e.key === 'ArrowUp') { e.preventDefault(); send('prev') }
 });
+syncPlay(); syncVolume(); syncTime(); showControls();
 </script></body></html>`

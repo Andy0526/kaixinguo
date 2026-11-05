@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	titleBarHeight = 52
+	titleBarHeight = 40
 	sidebarWidth   = 220
 )
 
@@ -31,6 +31,11 @@ type app struct {
 	proxy  *proxy
 
 	cacheDir string
+	dataDir  string
+
+	// The first launch's tour, until it is finished or skipped.
+	tutorialOn   bool
+	tutorialStep int
 
 	// The sidebar.
 	query       string
@@ -60,6 +65,22 @@ type app struct {
 	cur     *playback
 	gen     int
 
+	// The theater: the player filling the screen, its episodes a drawer
+	// that follows the pointer to the right edge.
+	fullscreen      bool
+	theaterShown    bool
+	panelOpen       bool
+	panelSuppressed bool // closed by hand, until the pointer leaves
+	panelJustClosed bool // the overlay is a frame behind the close
+
+	// The player's first entry shows its own small tour.
+	playerTutorialOn     bool
+	playerTutorialStep   int
+	playerTutorialPaused bool
+
+	// The appearance to go back to when the player closes.
+	playerTheme mygo.ThemeSource
+
 	// The player's web view.
 	web       *mygo.WebView
 	webReady  bool
@@ -73,6 +94,7 @@ func newApp(dataDir, cacheDir string) *app {
 		ready:      make(chan struct{}),
 		router:     ui.NewRouter("/discover"),
 		cacheDir:   cacheDir,
+		dataDir:    dataDir,
 		section:    "/discover",
 		recentOpen: true,
 		sideShown:  1,
@@ -109,6 +131,8 @@ func main() {
 		log.Fatal(err)
 	}
 	a := newApp(dataDir, cacheDir)
+	a.tutorialOn = !tutorialSeen(dataDir)
+	a.playerTutorialOn = !playerTutorialSeen(dataDir)
 	if a.client, err = newClient(dataDir); err != nil {
 		log.Fatal(err)
 	}
@@ -122,18 +146,34 @@ func main() {
 	})
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
-			Title:          "开心果",
-			Width:          1180,
-			Height:         760,
-			MinWidth:       780,
-			MinHeight:      520,
-			StateKey:       "main",
-			TitleBarStyle:  mygo.TitleBarHiddenInset,
-			TitleBarHeight: titleBarHeight,
-			Vibrancy:       mygo.VibrancySidebar,
-			Content:        ui.View(a.view),
+			Title:     "开心果",
+			Width:     1180,
+			Height:    760,
+			MinWidth:  780,
+			MinHeight: 520,
+			StateKey:  "main",
+			// Hidden, not HiddenInset: the inset style adds a toolbar
+			// taller than the title bar the app draws.
+			TitleBarStyle:        mygo.TitleBarHidden,
+			TrafficLightPosition: &mygo.Point{X: 20, Y: 13},
+			TitleBarHeight:       titleBarHeight,
+			Vibrancy:             mygo.VibrancySidebar,
+			Content:              ui.View(a.view),
 		})
+		a.fullscreen = a.win.IsFullScreen()
 		close(a.ready)
+		// The theater follows the window: entering full screen with the
+		// green button does what the theater button does.
+		a.win.OnEnterFullScreen(func() {
+			a.win.Update(func() { a.fullscreen = true })
+		})
+		a.win.OnLeaveFullScreen(func() {
+			a.win.Update(func() {
+				a.fullscreen = false
+				a.panelOpen = false
+				a.theaterShown = false
+			})
+		})
 		a.loadMore(a.home)
 	})
 	if err := mygo.App.Run(); err != nil {
