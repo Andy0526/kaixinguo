@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.2.0] - 2026-11-05
+
 ### 新增
 
 - 收藏：剧集页新增「收藏」按钮，列表里的卡片右键也能收藏或取消收藏。侧栏新增「我的 › 收藏」，列出收藏的剧；已收藏的剧在列表里标有星号。收藏保存在 `~/Library/Application Support/开心果/favorites.json`。
@@ -31,5 +33,6 @@
 - 暂不支持分段（DASH/HLS）的长视频
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo/compare/v0.1.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kadaliao/kaixinguo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kadaliao/kaixinguo/releases/tag/v0.1.0
