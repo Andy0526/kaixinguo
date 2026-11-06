@@ -177,15 +177,15 @@ func TestTitleBarButtonsClearOfTrafficLights(t *testing.T) {
 	tt := ui.NewTester(a.view, 1180, 760)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Left: 80})
 	tt.Advance(time.Second)
-	if r, ok := tt.Find("返回"); !ok || r.X < 230 || r.X > 250 {
+	if r, ok := tt.Find("返回"); !ok || r.X != 239 {
 		t.Fatalf("the series' back button at %v, not at the content's margin", r)
 	}
 
 	a.cur = &playback{seriesID: "1", number: 1, gen: 1}
 	a.router.Push("/play/1")
 	tt.Advance(time.Second)
-	if r, ok := tt.Find("退出播放"); !ok || r.X < 80 {
-		t.Fatalf("the player's exit button at %v, under the traffic lights", r)
+	if r, ok := tt.Find("退出播放"); !ok || r.X != 90 {
+		t.Fatalf("the player's exit button at %v, not past the traffic lights", r)
 	}
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight})
 	tt.Advance(time.Second)
