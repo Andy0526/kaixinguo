@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/beilunyang/openhongguo/sdk/model"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 )
@@ -28,6 +29,21 @@ func (a *app) view(c *ui.Context) {
 	onPlayer := strings.HasPrefix(path, "/play/")
 	if a.onPlayer && !onPlayer {
 		a.evalJS("kx.pause()") // left the player
+		a.panelOpen = false
+		a.panelSuppressed = false
+		a.panelJustClosed = false
+		a.panelReveal = false
+		a.panelPinned = false
+		a.playerSet = false
+		a.theaterShown = false
+		if a.fullscreen && a.theaterFullscreen {
+			a.setFullScreen(false) // only the full screen the theater entered
+		}
+		a.theaterFullscreen = false
+		a.playerAppearance(false)
+	}
+	if !a.onPlayer && onPlayer {
+		a.playerAppearance(true)
 	}
 	a.onPlayer = onPlayer
 	switch path {
@@ -77,12 +93,23 @@ func (a *app) view(c *ui.Context) {
 		}).Grow(1).MinWidth(0).Background(t.Background)
 	})
 
-	c.OnShortcut(ui.Cmd, ui.KeyF, func() {
-		if onPlayer {
-			a.router.Back()
-		}
-		a.searchField.Focus(c)
-	})
+	if !a.tutorialOn && !(onPlayer && a.playerTutorialOn) {
+		c.OnShortcut(ui.Cmd, ui.KeyF, func() {
+			if onPlayer {
+				a.leavePlayer()
+			}
+			a.searchField.Focus(c)
+		})
+	}
+	if onPlayer && !a.tutorialOn && !a.playerTutorialOn {
+		// The player's keys are the window's too, so that they go on
+		// working when the focus left its page, as it does when the
+		// theater's episodes close.
+		a.playerShortcuts(c)
+	}
+	if a.tutorialOn {
+		a.tutorial(c)
+	}
 }
 
 func (a *app) sidebar(c *ui.Context, vibrant bool) {
@@ -116,10 +143,32 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 			})
 		})
 		if len(a.hist.list) > 0 {
-			ui.SidebarSection(c, "最近观看", &a.recentOpen, func() {
-				for _, w := range a.hist.list[:min(len(a.hist.list), 8)] {
+			ui.SidebarSection(c, "最近播放", &a.recentOpen, func() {
+				ui.Row(c).Gap(3).Padding(0, 8, 4, 8).Children(func() {
+					for _, f := range []struct{ id, label string }{
+						{"", "全部"}, {"want", "想看"}, {"watching", "正在看"}, {"done", "已看完"},
+					} {
+						if a.recentFilterButton(c, f.id, f.label) {
+							a.recentFilter = f.id
+						}
+					}
+				})
+				items := a.hist.filtered(a.recentFilter)
+				if len(items) == 0 {
+					ui.Text(c, "还没有这样的剧").FontSize(11).TextColor(t.TextMuted).
+						Padding(3, 12, 8, 12)
+					return
+				}
+				for _, w := range items[:min(len(items), 8)] {
 					ui.SidebarItem(c.Key(w.SeriesID), "/series/"+w.SeriesID, iconClock, w.Title).Children(func() {
-						ui.Textf(c, "%d", w.Episode).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+						switch w.status() {
+						case "want":
+							ui.Text(c, "想看").FontSize(11).TextColor(t.TextMuted)
+						case "done":
+							ui.Text(c, "看完").FontSize(11).TextColor(t.TextMuted)
+						default:
+							ui.Textf(c, "%d", w.Episode).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+						}
 					})
 				}
 			})
@@ -131,6 +180,26 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	if list.Changed() {
 		a.router.Push(selected)
 	}
+}
+
+// recentFilterButton is one of the recent list's status filters.
+func (a *app) recentFilterButton(c *ui.Context, id, label string) bool {
+	t := c.Theme()
+	on := a.recentFilter == id
+	b := ui.ButtonBase(c.Key("recent:"+id)).Padding(3, 7).Radius(999).Label(label).
+		Cursor(ui.CursorPointer)
+	switch {
+	case on:
+		b.Background(t.Accent).TextColor(t.AccentText)
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.14))
+	default:
+		b.Background(t.Text.Alpha(0.07))
+	}
+	b.Children(func() {
+		ui.Text(c, label).FontSize(10.5).FontWeight(500)
+	})
+	return b.Clicked()
 }
 
 // sectionItem is the sidebar's item of a section's page. The item stays
@@ -189,7 +258,7 @@ func (a *app) cardGrid(c *ui.Context, f *feed, top float32, empty string) {
 	rowH := (itemW-2*cellPadX)*4/3 + 62
 	n := len(f.cards)
 	ui.GridView(c, &f.grid, n, posterMinW, rowH, func(i int) {
-		a.card(c, f.cards[i])
+		a.card(c, f.cards[i], f.showWatch)
 		if i >= n-cols*2 && f.more {
 			a.loadMore(f)
 		}
@@ -228,7 +297,7 @@ func (a *app) feedState(c *ui.Context, f *feed, top float32, empty string) {
 }
 
 // card is a series in a grid: its poster, title and a line about it.
-func (a *app) card(c *ui.Context, k card) {
+func (a *app) card(c *ui.Context, k card, showWatch bool) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key(k.ID)).Fill().Label(k.Title).Cursor(ui.CursorPointer)
 	hover := b.Hovered()
@@ -240,7 +309,12 @@ func (a *app) card(c *ui.Context, k card) {
 	})
 	b.Children(func() {
 		ui.Column(c).Fill().Padding(4, cellPadX, 14, cellPadX).Gap(9).Children(func() {
-			a.poster(c, k.Cover, 10, hover).Grow(1).MinHeight(0)
+			poster := a.poster(c, k.Cover, 10, hover).Grow(1).MinHeight(0)
+			if showWatch {
+				if label, fraction, bar, ok := a.favoriteProgress(k); ok {
+					poster.Children(func() { a.watchOverlay(c, label, fraction, bar) })
+				}
+			}
 			ui.Column(c).Gap(2).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					if k.Rank > 0 {
@@ -257,6 +331,98 @@ func (a *app) card(c *ui.Context, k card) {
 	})
 	if b.Clicked() {
 		a.router.Push("/series/" + k.ID)
+	}
+}
+
+// favoriteProgress is what a saved series' card says about watching it:
+// the badge, how full its bar is, and whether it has a bar at all.
+func (a *app) favoriteProgress(k card) (label string, fraction float64, bar, ok bool) {
+	w, ok := a.hist.get(k.ID)
+	if !ok {
+		return "", 0, false, false
+	}
+	season := w.Season
+	if season == 0 {
+		if sp := a.series[k.ID]; sp != nil && sp.series != nil {
+			season = sp.seasonIndex()
+		}
+	}
+	if season == 0 {
+		title := w.Title
+		if title == "" {
+			title = k.Title
+		}
+		season = seasonNumber(title)
+	}
+	total := k.Episodes
+	if w.Total > 0 {
+		total = w.Total
+	}
+	switch w.status() {
+	case "done":
+		if season > 0 {
+			return fmt.Sprintf("第 %d 季 · 已看完", season), 1, true, true
+		}
+		return "已看完", 1, true, true
+	case "watching":
+		if season > 0 {
+			return fmt.Sprintf("第 %d 季 · 第 %d 集", season, w.Episode), watchFraction(w, total), true, true
+		}
+		return fmt.Sprintf("看到第 %d 集", w.Episode), watchFraction(w, total), true, true
+	case "want":
+		if season > 0 {
+			return fmt.Sprintf("第 %d 季 · 想看", season), 0, false, true
+		}
+		return "想看", 0, false, true
+	}
+	return "", 0, false, false
+}
+
+// watchFraction is how much of a series' episodes were watched, counting
+// the part of the one under way.
+func watchFraction(w watch, total int) float64 {
+	if w.Done {
+		return 1
+	}
+	if total <= 0 {
+		return 0
+	}
+	finished := 0
+	for _, e := range w.Episodes {
+		if e.Finished {
+			finished++
+		}
+	}
+	part := 0.0
+	if !w.Finished && w.Episode > 0 {
+		if e, ok := w.episode(w.Episode); !ok || !e.Finished {
+			_, part = w.episodeState(w.Episode)
+		}
+	}
+	fraction := (float64(finished) + part) / float64(total)
+	if fraction < 0 {
+		return 0
+	}
+	if fraction > 1 {
+		return 1
+	}
+	return fraction
+}
+
+// watchOverlay draws the progress badge and bar over a poster's bottom.
+func (a *app) watchOverlay(c *ui.Context, label string, fraction float64, bar bool) {
+	ui.Box(c).Absolute().Left(0).Right(0).Bottom(0).Height(48).
+		LinearGradient(ui.LinearGradient{
+			From: ui.RGBA(0, 0, 0, 0), To: ui.RGBA(0, 0, 0, 0.7), Angle: 180,
+		})
+	ui.Row(c).Absolute().Left(8).Right(8).Bottom(10).Children(func() {
+		ui.Row(c).Padding(3, 7).Radius(6).Background(ui.RGBA(0, 0, 0, 0.55)).Children(func() {
+			ui.Text(c, label).FontSize(11).FontWeight(600).SingleLine().
+				TextColor(ui.RGBA(255, 255, 255, 0.95))
+		})
+	})
+	if bar {
+		ui.Progress(c, fraction).Absolute().Left(8).Right(8).Bottom(5).Height(3).Label("观看进度")
 	}
 }
 
@@ -478,7 +644,7 @@ func (a *app) hotPage(c *ui.Context) {
 							if k.Sub == "" {
 								k.Sub = it.Heat
 							}
-							ui.Box(c.Key(b.Name+it.SeriesID)).Size(166, (166-2*cellPadX)*4/3+62).Children(func() { a.card(c, k) })
+							ui.Box(c.Key(b.Name+it.SeriesID)).Size(166, (166-2*cellPadX)*4/3+62).Children(func() { a.card(c, k, false) })
 						}
 					})
 				}
@@ -504,13 +670,14 @@ func (a *app) loadHot() {
 func (a *app) favoritesPage(c *ui.Context) {
 	if a.favFeed == nil || a.favRev != a.favs.rev {
 		f := newFeed(nil)
-		f.started = true
+		f.started, f.showWatch = true, true
 		if a.favFeed != nil {
 			f.grid = a.favFeed.grid // stay where the viewer scrolled to
 		}
 		f.add(page{cards: a.favs.cards()})
 		a.favFeed, a.favRev = f, a.favs.rev
 	}
+	a.favFeed.showWatch = true
 	a.gridPage(c, "收藏", a.favFeed, nil, nil, 0, "还没有收藏。在剧集页点「收藏」，想看的就存下来。")
 }
 
@@ -530,6 +697,31 @@ func b2f(b bool) float32 {
 		return 1
 	}
 	return 0
+}
+
+// playerAppearance draws the window's chrome dark while the player shows,
+// so that the title bar that comes down with the menu bar in full screen is
+// black rather than the system's white. The player's page is dark already;
+// the rest of the app takes its appearance back afterwards.
+func (a *app) playerAppearance(on bool) {
+	if a.win == nil {
+		return // no window to draw, as in the tester
+	}
+	if on {
+		a.playerTheme = mygo.Theme.Source()
+		mygo.Theme.SetSource(mygo.ThemeDark)
+		return
+	}
+	if a.playerTheme != "" {
+		mygo.Theme.SetSource(a.playerTheme)
+		a.playerTheme = ""
+	}
+}
+
+// titleBarLeft is where a title bar control goes, clear of the window's
+// traffic lights (and of the screen's edge in full screen).
+func titleBarLeft(c *ui.Context, gap float32) float32 {
+	return max(c.TitleBar().Left+gap, 16)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

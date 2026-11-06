@@ -32,7 +32,8 @@ func (a *app) seriesView(c *ui.Context, id string) {
 	})
 }
 
-// backButton is a round button of glass that goes back.
+// backButton is a round button of glass that goes back. The series page
+// sits beside the sidebar, where there are no traffic lights to avoid.
 func (a *app) backButton(c *ui.Context, left float32) {
 	if !a.router.CanGoBack() {
 		return
@@ -88,6 +89,7 @@ func (a *app) seriesBody(c *ui.Context, sp *seriesPage) {
 							}
 						}
 						a.favButton(c, sp)
+						a.wantButton(c, sp)
 					})
 				})
 			})
@@ -179,6 +181,54 @@ func (a *app) favButton(c *ui.Context, sp *seriesPage) {
 	}
 }
 
+// wantButton puts a series the viewer has not started on the want list,
+// which is also the 想看 filter of the recent list.
+func (a *app) wantButton(c *ui.Context, sp *seriesPage) {
+	t := c.Theme()
+	w, ok := a.hist.get(sp.id)
+	if ok && w.Episode > 0 {
+		return // under way; its status is 正在看
+	}
+	want := ok && w.Want
+	label := "想看"
+	if want {
+		label = "已想看"
+	}
+	action := "加入最近播放的想看"
+	if want {
+		action = "从最近播放的想看移除"
+	}
+	b := ui.ButtonBase(c.Key("want")).Padding(8, 18, 8, 15).Radius(9).Label(label).
+		Tooltip(action).Cursor(ui.CursorPointer)
+	switch {
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.2))
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.14))
+	default:
+		b.Background(t.Text.Alpha(0.09))
+	}
+	b.Children(func() {
+		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, iconClock).Size(14, 14)
+			ui.Text(c, label).FontSize(14).FontWeight(600)
+		})
+	})
+	if !b.Clicked() {
+		return
+	}
+	if want {
+		a.hist.remove(sp.id)
+		return
+	}
+	if !ok {
+		w = watch{SeriesID: sp.id, Title: sp.series.Title, Cover: sp.series.CoverURL}
+	}
+	w.Want, w.Done, w.Episode = true, false, 0
+	w.Total = len(sp.episodes)
+	a.hist.record(w)
+}
+
 func (a *app) episodeGrid(c *ui.Context, sp *seriesPage) {
 	t := c.Theme()
 	eps := sp.episodes
@@ -193,17 +243,19 @@ func (a *app) episodeGrid(c *ui.Context, sp *seriesPage) {
 			ui.Text(c, "选集").FontSize(19).Bold()
 			ui.Textf(c, "共 %d 集", len(eps)).FontSize(13).TextColor(t.TextMuted)
 			ui.Spacer(c)
-			a.partPicker(c, sp)
+			a.partPicker(c, sp, false)
 		})
 		if len(eps) == 0 {
 			ui.Text(c, "暂时没有可看的剧集").FontSize(13).TextColor(t.TextMuted)
 			return
 		}
 		lo, hi := a.partRange(sp)
+		w, _ := a.hist.get(sp.id)
 		ui.Row(c).Wrap().Gap(8).Children(func() {
 			for _, e := range eps[lo:hi] {
-				if a.episodeChip(c, e, e.Number == cur, t).Clicked() && e.Playable {
-					a.play(sp.id, e.Number, 0)
+				watched, progress := w.episodeState(e.Number)
+				if a.episodeChip(c, e, e.Number == cur, watched, progress, 56, t).Clicked() && e.Playable {
+					a.play(sp.id, e.Number, w.episodeStart(e.Number))
 				}
 			}
 		})
@@ -241,15 +293,17 @@ func (a *app) playSeason(id string) {
 		a.play(sid, n, start)
 		return
 	}
-	if w, ok := a.hist.get(id); ok && !w.Finished {
+	if w, ok := a.hist.get(id); ok && w.Episode > 0 && !w.Finished {
 		a.play(id, w.Episode, max(0, w.Position-3))
 		return
 	}
 	a.play(id, 1, 0)
 }
 
-// partPicker chooses which hundred episodes show, for long series.
-func (a *app) partPicker(c *ui.Context, sp *seriesPage) {
+// partPicker chooses which hundred episodes show, for long series. The
+// drawer wraps the choices in the panel: a select's popup would be
+// outside it and close it when the pointer went to an option.
+func (a *app) partPicker(c *ui.Context, sp *seriesPage, inline bool) {
 	n := len(sp.episodes)
 	if n <= episodesPerPart {
 		return
@@ -260,6 +314,17 @@ func (a *app) partPicker(c *ui.Context, sp *seriesPage) {
 	}
 	if len(labels) <= 6 {
 		ui.Segmented(c.Key("parts"), &sp.part, labels...)
+		return
+	}
+	if inline {
+		t := c.Theme()
+		ui.Row(c).Wrap().Gap(4).Children(func() {
+			for i, label := range labels {
+				if a.chip(c, "part:"+label, label, i == sp.part, t) {
+					sp.part = i
+				}
+			}
+		})
 		return
 	}
 	chosen := labels[min(sp.part, len(labels)-1)]
@@ -278,12 +343,15 @@ func (a *app) partRange(sp *seriesPage) (int, int) {
 }
 
 // episodeChip is an episode's number to click, filled while it is the
-// one the viewer is on.
-func (a *app) episodeChip(c *ui.Context, e model.Episode, current bool, t *ui.Theme) ui.Element {
-	b := ui.ButtonBase(c.Key(e.ID)).Size(56, 38).Radius(9).Center().Label(fmt.Sprintf("第 %d 集", e.Number))
+// one the viewer is on. Watched episodes carry a check; a partly watched
+// one a line at the bottom.
+func (a *app) episodeChip(c *ui.Context, e model.Episode, current, watched bool, progress float64, width float32, t *ui.Theme) ui.Element {
+	b := ui.ButtonBase(c.Key(e.ID)).Size(width, 38).Radius(9).Center().Label(fmt.Sprintf("第 %d 集", e.Number))
 	switch {
 	case current:
 		b.Background(t.Accent).TextColor(t.AccentText)
+	case watched:
+		b.Background(t.Accent.Alpha(0.12))
 	case b.Hovered() && e.Playable:
 		b.Background(t.Text.Alpha(0.12))
 	default:
@@ -294,12 +362,43 @@ func (a *app) episodeChip(c *ui.Context, e model.Episode, current bool, t *ui.Th
 	} else {
 		b.Opacity(0.45).Tooltip("这一集需要登录")
 	}
+	switch {
+	case watched:
+		b.Tooltip("已看完")
+	case progress > 0:
+		b.Tooltip(fmt.Sprintf("看至 %d%%", int(progress*100)))
+	}
 	b.Children(func() {
 		if e.Playable {
 			ui.Textf(c, "%d", e.Number).FontSize(14).FontWeight(500).FontFeatures("tnum")
 		} else {
 			ui.Icon(c, iconLock).Size(13, 13)
 		}
+		if watched {
+			color := t.Accent
+			if current {
+				color = t.AccentText
+			}
+			ui.Icon(c, iconCheck).Absolute().Top(3).Right(4).Size(9, 9).TextColor(color)
+		} else if progress > 0 {
+			track, fill := t.Text.Alpha(0.18), t.Accent
+			if current {
+				track, fill = t.AccentText.Alpha(0.3), t.AccentText
+			}
+			ui.Box(c).Absolute().Left(7).Right(7).Bottom(4).Height(2).Radius(1).Background(track)
+			// The fill follows the track's width: the series' chips are
+			// wider than the player's.
+			ui.Box(c).Absolute().Left(7).Bottom(4).Height(2).Radius(1).
+				Width(episodeProgressWidth(width, progress)).Background(fill)
+		}
 	})
 	return b
+}
+
+// episodeProgressWidth fills the track between the chip's 7pt insets.
+func episodeProgressWidth(width float32, progress float64) float32 {
+	if width <= 14 || progress <= 0 {
+		return 0
+	}
+	return (width - 14) * float32(progress)
 }

@@ -147,3 +147,21 @@ func TestNumberSeasons(t *testing.T) {
 		}
 	}
 }
+
+// Playing a series in several seasons keeps the season on its history, so
+// the favorites page can say which one is under way.
+func TestRecordSeason(t *testing.T) {
+	a := seasonsApp(t)
+	sp := a.series["s2"]
+	a.recordWatch(sp, 5, 20, 40, false)
+	w, ok := a.hist.get("s2")
+	if !ok || w.Season != 2 {
+		t.Fatalf("watch %+v, want season 2", w)
+	}
+	if got := seasonNumber("持械入宋：第三季"); got != 3 {
+		t.Fatalf("seasonNumber = %d, want 3", got)
+	}
+	if got := seasonNumber("浅浅归聿"); got != 0 {
+		t.Fatalf("seasonNumber of a single season = %d, want 0", got)
+	}
+}

@@ -172,3 +172,45 @@ func savedIDs(t *testing.T, f *favorites) string {
 	}
 	return strings.Join(ids, ",")
 }
+
+// A saved series shows how far the viewer got into it, on its poster.
+func TestFavoriteShowsWatchProgress(t *testing.T) {
+	a := testApp(t)
+	a.favs.add(favOf(card{ID: "1", Title: "浅浅归聿", Episodes: 130}))
+	a.hist.record(watch{SeriesID: "1", Title: "浅浅归聿", Episode: 7, Total: 130,
+		Episodes: map[int]episodeWatch{7: {Position: 20, Duration: 40}}})
+	a.router.Push("/favorites")
+	tt := ui.NewTester(a.view, 1180, 760)
+	tt.Advance(time.Second)
+	if !tt.HasText("看到第 7 集") {
+		t.Fatalf("no watch progress on the 收藏 page: %q", tt.Texts())
+	}
+}
+
+// A series in several seasons says which season and episode are under way.
+func TestFavoriteShowsSeasonProgress(t *testing.T) {
+	a := testApp(t)
+	a.favs.add(fav{SeriesID: "s2", Title: "浅浅归聿第二季", Episodes: 80})
+	a.hist.record(watch{SeriesID: "s2", Title: "浅浅归聿第二季", Episode: 5, Total: 80,
+		Episodes: map[int]episodeWatch{5: {Position: 10, Duration: 40}}})
+	a.router.Push("/favorites")
+	tt := ui.NewTester(a.view, 1180, 760)
+	tt.Advance(time.Second)
+	if !tt.HasText("第 2 季 · 第 5 集") {
+		t.Fatalf("no season progress on the 收藏 page: %q", tt.Texts())
+	}
+}
+
+// The fraction counts finished episodes and the part of the current one.
+func TestWatchFraction(t *testing.T) {
+	w := watch{Episode: 3, Total: 4, Episodes: map[int]episodeWatch{
+		1: {Finished: true}, 2: {Finished: true}, 3: {Position: 20, Duration: 40},
+	}}
+	if got := watchFraction(w, 4); got != 2.5/4 {
+		t.Fatalf("progress %v, want 2.5/4", got)
+	}
+	w.Done = true
+	if got := watchFraction(w, 4); got != 1 {
+		t.Fatalf("finished progress %v, want 1", got)
+	}
+}

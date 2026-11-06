@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	titleBarHeight = 52
+	titleBarHeight = 40
 	sidebarWidth   = 220
 )
 
@@ -31,13 +31,19 @@ type app struct {
 	proxy  *proxy
 
 	cacheDir string
+	dataDir  string
+
+	// The first launch's tour, until it is finished or skipped.
+	tutorialOn   bool
+	tutorialStep int
 
 	// The sidebar.
-	query       string
-	searchField ui.Handle
-	section     string // the sidebar's page the page shown belongs to
-	recentOpen  bool
-	sideShown   float32
+	query        string
+	searchField  ui.Handle
+	section      string // the sidebar's page the page shown belongs to
+	recentOpen   bool
+	recentFilter string // recent list filter: "", want, watching or done
+	sideShown    float32
 
 	// The catalog.
 	home         *feed
@@ -60,12 +66,32 @@ type app struct {
 	cur     *playback
 	gen     int
 
+	// The theater: the player filling the screen, its episodes a drawer
+	// that follows the pointer to the right edge.
+	fullscreen        bool
+	theaterFullscreen bool // the theater entered full screen, so leaving may leave it
+	theaterShown      bool
+	panelOpen         bool
+	panelSuppressed   bool // closed by hand, until the pointer leaves
+	panelJustClosed   bool // the overlay is a frame behind the close
+	panelReveal       bool // the next drawer scrolls to the episode playing
+	panelPinned       bool // opened from the toolbar; stays until entered or closed
+
+	// The player's first entry shows its own small tour.
+	playerTutorialOn   bool
+	playerTutorialStep int
+	playerTutorialHeld bool
+
+	// The appearance to go back to when the player closes.
+	playerTheme mygo.ThemeSource
+
 	// The player's web view.
 	web       *mygo.WebView
 	webReady  bool
-	pendingJS string
+	pendingJS []string    // what the page runs once it has loaded
 	js        chan string // what the page runs, in order
 	onPlayer  bool
+	playerSet bool // the player page has its system settings
 }
 
 func newApp(dataDir, cacheDir string) *app {
@@ -73,6 +99,7 @@ func newApp(dataDir, cacheDir string) *app {
 		ready:      make(chan struct{}),
 		router:     ui.NewRouter("/discover"),
 		cacheDir:   cacheDir,
+		dataDir:    dataDir,
 		section:    "/discover",
 		recentOpen: true,
 		sideShown:  1,
@@ -109,6 +136,8 @@ func main() {
 		log.Fatal(err)
 	}
 	a := newApp(dataDir, cacheDir)
+	a.tutorialOn = !tutorialSeen(dataDir)
+	a.playerTutorialOn = !playerTutorialSeen(dataDir)
 	if a.client, err = newClient(dataDir); err != nil {
 		log.Fatal(err)
 	}
@@ -122,18 +151,37 @@ func main() {
 	})
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
-			Title:          "开心果",
-			Width:          1180,
-			Height:         760,
-			MinWidth:       780,
-			MinHeight:      520,
-			StateKey:       "main",
-			TitleBarStyle:  mygo.TitleBarHiddenInset,
-			TitleBarHeight: titleBarHeight,
-			Vibrancy:       mygo.VibrancySidebar,
-			Content:        ui.View(a.view),
+			Title:     "开心果",
+			Width:     1180,
+			Height:    760,
+			MinWidth:  780,
+			MinHeight: 520,
+			StateKey:  "main",
+			// Hidden, not HiddenInset: the inset style adds a toolbar
+			// taller than the title bar the app draws.
+			TitleBarStyle:        mygo.TitleBarHidden,
+			TrafficLightPosition: &mygo.Point{X: 20, Y: 13},
+			TitleBarHeight:       titleBarHeight,
+			Vibrancy:             mygo.VibrancySidebar,
+			Content:              ui.View(a.view),
 		})
+		a.fullscreen = a.win.IsFullScreen()
 		close(a.ready)
+		// The theater follows the window: entering full screen with the
+		// green button does what the theater button does.
+		a.win.OnEnterFullScreen(func() {
+			a.win.Update(func() { a.fullscreen = true })
+		})
+		a.win.OnLeaveFullScreen(func() {
+			a.win.Update(func() {
+				a.fullscreen = false
+				a.theaterFullscreen = false
+				a.panelOpen = false
+				a.panelReveal = false
+				a.panelPinned = false
+				a.theaterShown = false
+			})
+		})
 		a.loadMore(a.home)
 	})
 	if err := mygo.App.Run(); err != nil {
