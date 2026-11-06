@@ -32,6 +32,7 @@
 - **新手教程**：第一次启动用四页卡片介绍搜索、收藏、影院和手势；第一次播放还有播放器专属指南
 - **手势**：视频右半边上下滚动调音量，左半边调亮度
 - **秒开**：上次的推荐和封面缓存在本地，打开就显示，新内容在后台刷新
+- **自动更新**：有新版本时弹窗提醒，附更新说明，一键下载安装并重启；侧栏底部也会提示，菜单「开心果 › 检查更新…」可随时手动检查
 - 跟随系统的浅色和深色外观
 
 | 剧集详情 | 收藏 |
@@ -69,6 +70,7 @@
 | 观看记录 | `~/Library/Application Support/开心果/history.json` |
 | 收藏 | `~/Library/Application Support/开心果/favorites.json` |
 | 匿名设备信息、窗口位置 | `~/Library/Application Support/开心果/` |
+| 更新设置（跳过的版本、是否自动安装） | `~/Library/Application Support/开心果/updater.json` |
 | 新手教程标记 | `~/Library/Application Support/开心果/tutorial` |
 | 播放器指南标记 | `~/Library/Application Support/开心果/player-tutorial` |
 | 封面和推荐缓存 | `~/Library/Caches/开心果/` |
@@ -78,6 +80,9 @@
 卸载时删掉应用和上面两个目录；播放器的网页缓存在 `~/Library/WebKit/com.kadaliao.kaixinguo` 和 `~/Library/Caches/com.kadaliao.kaixinguo`，也可以一并删掉。
 
 ## 常见问题
+
+**怎么更新？**
+0.4.0 起，开心果启动 10 秒后和之后每天检查一次 GitHub 上的最新版本，有新版本就弹窗提醒，点「安装更新」即可，下载的更新经过签名校验。0.3.0 及更早的版本没有这个功能，需要从 [Releases](https://github.com/kadaliao/kaixinguo/releases/latest) 手动下载一次。
 
 **第一次打开，列表很久才出来？**
 第一次启动要注册一个匿名设备，网络慢时可能要等十几秒。之后启动会先显示缓存。

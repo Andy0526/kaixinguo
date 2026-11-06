@@ -20,5 +20,6 @@ var (
 	iconTheater  = icon(`<rect x="1.9" y="3.1" width="12.2" height="9.8" rx="1.8"/><path d="M1.9 10.1h12.2" fill="currentColor"/>`)
 	iconStar     = icon(`<path d="M8 2.1 9.53 5.9l4.08.28-3.14 2.62 1 3.97L8 10.6l-3.47 2.17 1-3.97L2.39 6.18l4.08-.28z"/>`)
 	iconStarOn   = icon(`<path d="M8 2.1 9.53 5.9l4.08.28-3.14 2.62 1 3.97L8 10.6l-3.47 2.17 1-3.97L2.39 6.18l4.08-.28z" fill="currentColor"/>`)
+	iconUpdate   = icon(`<circle cx="8" cy="8" r="6"/><path d="M8 11V5.2M5.6 7.4 8 5l2.4 2.4"/>`)
 	iconFlame    = icon(`<path d="M8 14c2.6 0 4.5-1.8 4.5-4.4 0-2.6-1.9-3.9-2.6-6.1-.3 1.4-1 2.2-1.7 2.6C8.2 4.3 7.3 2.8 5.8 2c.3 2.3-2.3 3.9-2.3 7.6C3.5 12.2 5.4 14 8 14z"/>`)
 )

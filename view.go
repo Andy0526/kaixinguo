@@ -213,6 +213,7 @@ func (a *app) sidebar(c *ui.Context, vibrant bool) {
 	if list.Changed() {
 		a.router.Push(selected)
 	}
+	a.updateBanner(c)
 }
 
 // recentFilterButton is one of the recent list's status filters.

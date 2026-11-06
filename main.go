@@ -85,6 +85,10 @@ type app struct {
 	// The appearance to go back to when the player closes.
 	playerTheme mygo.ThemeSource
 
+	// A newer version the updater found, and how to offer it again.
+	newVersion   string
+	checkUpdates func()
+
 	// The player's web view.
 	web       *mygo.WebView
 	webReady  bool
@@ -149,6 +153,7 @@ func main() {
 		a.hist.store.flush()
 		a.favs.store.flush()
 	})
+	useUpdater()
 	mygo.App.WhenReady(func() {
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "开心果",
@@ -167,6 +172,7 @@ func main() {
 		})
 		a.fullscreen = a.win.IsFullScreen()
 		close(a.ready)
+		a.watchUpdates()
 		// The theater follows the window: entering full screen with the
 		// green button does what the theater button does.
 		a.win.OnEnterFullScreen(func() {

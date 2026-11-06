@@ -42,6 +42,7 @@ flowchart LR
 | `store.go` | 把一个列表存成 JSON 文件：后台写入、原子替换、退出前刷盘 |
 | `history.go` | 观看记录 |
 | `favorites.go` | 收藏 |
+| `update.go` | 自动更新：MyGo 的更新窗口、「检查更新…」菜单、侧栏的新版本提示 |
 | `icons.go` | 侧栏和按钮用的 SVG 图标 |
 | `internal/cenc` | 把 CENC 加密的 MP4 按字节区间还原成明文 |
 | `internal/imageio` | 通过 purego 调 macOS ImageIO 解码 HEIC 等格式 |
@@ -90,6 +91,17 @@ flowchart LR
 - 缓存的键是去掉查询参数的 URL，因为签名参数每次都变。
 - 一分钟没出现在任何一帧里的封面会从内存释放，下次从磁盘的 JPEG 重新解码，只要几毫秒。
 
+## 自动更新
+
+自动更新用的是 MyGo 自带的更新器（`mygo.Updater`）和它的原生 UI 更新窗口（`plugins/updater/native`），开心果只做了接线：
+
+- `mygo.json` 的 `updates` 写着公钥和 GitHub 仓库。`mygo build` 拿到私钥时，除了 `.app` 和 `.dmg`，还会生成签名过的更新包 `kai-xin-guo-<版本>-darwin-universal.tar.gz`、相对前几个版本的增量包（`.delta`）和清单 `update-darwin-universal.json`，更新说明取自 `CHANGELOG.md` 里这个版本的一节。
+- 应用启动 10 秒后、之后每天一次，读 GitHub 最新 Release 里的清单，版本更新就弹出更新窗口：安装、稍后提醒、跳过这个版本。下载的包用编进应用的公钥校验，签名不对就不装。
+- 窗口固定用简体中文，和应用一致。用户选了「稍后提醒」后，侧栏底部仍显示「新版本 x.y.z」，点一下再次打开窗口（`updater.OnChange` 把版本号交给 `app.newVersion`）。
+- `mygo dev` 的开发版、没有私钥打出来的包都不会检查更新。
+
+私钥的保管和发版步骤见 [releasing.md](releasing.md)。
+
 ## 本地数据
 
 | 文件 | 内容 | 写入方 |
@@ -98,6 +110,7 @@ flowchart LR
 | `Application Support/开心果/favorites.json` | 收藏，最近收藏的在前 | `favorites` |
 | `Application Support/开心果/device.json` | SDK 注册的匿名设备 | openhongguo |
 | `Application Support/开心果/window-state.json` | 窗口位置和大小 | MyGo |
+| `Application Support/开心果/updater.json` | 上次检查更新的时间、跳过的版本、是否自动安装 | MyGo 的更新插件 |
 | `Caches/开心果/home.json` | 推荐页第一页 | `data.go` |
 | `Caches/开心果/covers/` | 封面 JPEG | `covers` |
 
