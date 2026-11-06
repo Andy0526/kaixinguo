@@ -4,10 +4,12 @@
 
 ## [未发布]
 
+## [0.3.0] - 2026-11-06
+
 ### 新增
 
 - 影院模式：播放时双击视频，或点右上角的「影院 / 退出影院」，进入和退出全屏。
-- 影院选集：鼠标靠近窗口右侧边缘，选集自动出现；离开选集区域自动收起，不再需要点箭头。
+- 影院选集：鼠标靠近窗口右侧边缘，选集自动出现；离开选集区域自动收起。
 - 底部播放栏：播放/暂停、进度、时间、音量和小窗集中在一栏；播放时自动隐藏，移动鼠标出现。
 - 播放页手势：视频右半边上下滚动调音量，左半边调亮度，并显示当前数值。
 - 新手教程：第一次启动四页应用引导；第一次进入播放页四页播放器引导，可跳过，完成状态保存在本机。
@@ -49,6 +51,7 @@
 - 暂不支持分段（DASH/HLS）的长视频
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo/compare/v0.2.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kadaliao/kaixinguo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kadaliao/kaixinguo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kadaliao/kaixinguo/releases/tag/v0.1.0
