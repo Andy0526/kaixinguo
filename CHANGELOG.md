@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.4.0] - 2026-11-06
+
 ### 新增
 
 - 自动更新：启动后和之后每天检查一次新版本，有新版本时弹窗提醒，附更新说明，可以安装、稍后提醒或跳过这个版本；装好后一键重启。侧栏底部同时提示「新版本」，菜单「开心果 › 检查更新…」可随时手动检查。更新包经过签名校验。
@@ -59,7 +61,8 @@
 - 暂不支持分段（DASH/HLS）的长视频
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo/compare/v0.3.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kadaliao/kaixinguo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kadaliao/kaixinguo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kadaliao/kaixinguo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kadaliao/kaixinguo/releases/tag/v0.1.0
