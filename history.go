@@ -19,6 +19,7 @@ type watch struct {
 	Cover    string               `json:"cover,omitempty"`
 	Episode  int                  `json:"episode"`
 	Position float64              `json:"position,omitempty"` // seconds into the episode
+	Season   int                  `json:"season,omitempty"`   // the season's number, when it has several
 	Duration float64              `json:"duration,omitempty"`
 	Total    int                  `json:"total,omitempty"` // episodes in the series
 	Finished bool                 `json:"finished,omitempty"`
@@ -52,6 +53,12 @@ func loadHistory(dir string) *history {
 		if w.Finished && w.Total > 0 && w.Episode >= w.Total && !w.Done {
 			w.Done = true
 			changed = true
+		}
+		if w.Season == 0 && w.Episode > 0 {
+			if n := seasonNumber(w.Title); n > 0 {
+				w.Season = n
+				changed = true
+			}
 		}
 		h.list[i] = w
 	}

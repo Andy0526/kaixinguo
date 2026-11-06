@@ -260,6 +260,9 @@ func (a *app) recordWatch(sp *seriesPage, n int, pos, dur float64, finished bool
 	w, _ := a.hist.get(sp.id)
 	w.SeriesID, w.Title, w.Cover = sp.id, sp.series.Title, sp.series.CoverURL
 	w.Episode, w.Position, w.Duration, w.Total = n, pos, dur, len(sp.episodes)
+	if season := sp.seasonIndex(); season > 0 {
+		w.Season = season
+	}
 	w.Finished = finished
 	w.Want = false
 	// The store writes snapshots in the background; copy the map so this

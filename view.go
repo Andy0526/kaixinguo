@@ -258,7 +258,7 @@ func (a *app) cardGrid(c *ui.Context, f *feed, top float32, empty string) {
 	rowH := (itemW-2*cellPadX)*4/3 + 62
 	n := len(f.cards)
 	ui.GridView(c, &f.grid, n, posterMinW, rowH, func(i int) {
-		a.card(c, f.cards[i])
+		a.card(c, f.cards[i], f.showWatch)
 		if i >= n-cols*2 && f.more {
 			a.loadMore(f)
 		}
@@ -297,7 +297,7 @@ func (a *app) feedState(c *ui.Context, f *feed, top float32, empty string) {
 }
 
 // card is a series in a grid: its poster, title and a line about it.
-func (a *app) card(c *ui.Context, k card) {
+func (a *app) card(c *ui.Context, k card, showWatch bool) {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key(k.ID)).Fill().Label(k.Title).Cursor(ui.CursorPointer)
 	hover := b.Hovered()
@@ -309,7 +309,12 @@ func (a *app) card(c *ui.Context, k card) {
 	})
 	b.Children(func() {
 		ui.Column(c).Fill().Padding(4, cellPadX, 14, cellPadX).Gap(9).Children(func() {
-			a.poster(c, k.Cover, 10, hover).Grow(1).MinHeight(0)
+			poster := a.poster(c, k.Cover, 10, hover).Grow(1).MinHeight(0)
+			if showWatch {
+				if label, fraction, bar, ok := a.favoriteProgress(k); ok {
+					poster.Children(func() { a.watchOverlay(c, label, fraction, bar) })
+				}
+			}
 			ui.Column(c).Gap(2).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					if k.Rank > 0 {
@@ -326,6 +331,98 @@ func (a *app) card(c *ui.Context, k card) {
 	})
 	if b.Clicked() {
 		a.router.Push("/series/" + k.ID)
+	}
+}
+
+// favoriteProgress is what a saved series' card says about watching it:
+// the badge, how full its bar is, and whether it has a bar at all.
+func (a *app) favoriteProgress(k card) (label string, fraction float64, bar, ok bool) {
+	w, ok := a.hist.get(k.ID)
+	if !ok {
+		return "", 0, false, false
+	}
+	season := w.Season
+	if season == 0 {
+		if sp := a.series[k.ID]; sp != nil && sp.series != nil {
+			season = sp.seasonIndex()
+		}
+	}
+	if season == 0 {
+		title := w.Title
+		if title == "" {
+			title = k.Title
+		}
+		season = seasonNumber(title)
+	}
+	total := k.Episodes
+	if w.Total > 0 {
+		total = w.Total
+	}
+	switch w.status() {
+	case "done":
+		if season > 0 {
+			return fmt.Sprintf("第 %d 季 · 已看完", season), 1, true, true
+		}
+		return "已看完", 1, true, true
+	case "watching":
+		if season > 0 {
+			return fmt.Sprintf("第 %d 季 · 第 %d 集", season, w.Episode), watchFraction(w, total), true, true
+		}
+		return fmt.Sprintf("看到第 %d 集", w.Episode), watchFraction(w, total), true, true
+	case "want":
+		if season > 0 {
+			return fmt.Sprintf("第 %d 季 · 想看", season), 0, false, true
+		}
+		return "想看", 0, false, true
+	}
+	return "", 0, false, false
+}
+
+// watchFraction is how much of a series' episodes were watched, counting
+// the part of the one under way.
+func watchFraction(w watch, total int) float64 {
+	if w.Done {
+		return 1
+	}
+	if total <= 0 {
+		return 0
+	}
+	finished := 0
+	for _, e := range w.Episodes {
+		if e.Finished {
+			finished++
+		}
+	}
+	part := 0.0
+	if !w.Finished && w.Episode > 0 {
+		if e, ok := w.episode(w.Episode); !ok || !e.Finished {
+			_, part = w.episodeState(w.Episode)
+		}
+	}
+	fraction := (float64(finished) + part) / float64(total)
+	if fraction < 0 {
+		return 0
+	}
+	if fraction > 1 {
+		return 1
+	}
+	return fraction
+}
+
+// watchOverlay draws the progress badge and bar over a poster's bottom.
+func (a *app) watchOverlay(c *ui.Context, label string, fraction float64, bar bool) {
+	ui.Box(c).Absolute().Left(0).Right(0).Bottom(0).Height(48).
+		LinearGradient(ui.LinearGradient{
+			From: ui.RGBA(0, 0, 0, 0), To: ui.RGBA(0, 0, 0, 0.7), Angle: 180,
+		})
+	ui.Row(c).Absolute().Left(8).Right(8).Bottom(10).Children(func() {
+		ui.Row(c).Padding(3, 7).Radius(6).Background(ui.RGBA(0, 0, 0, 0.55)).Children(func() {
+			ui.Text(c, label).FontSize(11).FontWeight(600).SingleLine().
+				TextColor(ui.RGBA(255, 255, 255, 0.95))
+		})
+	})
+	if bar {
+		ui.Progress(c, fraction).Absolute().Left(8).Right(8).Bottom(5).Height(3).Label("观看进度")
 	}
 }
 
@@ -547,7 +644,7 @@ func (a *app) hotPage(c *ui.Context) {
 							if k.Sub == "" {
 								k.Sub = it.Heat
 							}
-							ui.Box(c.Key(b.Name+it.SeriesID)).Size(166, (166-2*cellPadX)*4/3+62).Children(func() { a.card(c, k) })
+							ui.Box(c.Key(b.Name+it.SeriesID)).Size(166, (166-2*cellPadX)*4/3+62).Children(func() { a.card(c, k, false) })
 						}
 					})
 				}
@@ -573,13 +670,14 @@ func (a *app) loadHot() {
 func (a *app) favoritesPage(c *ui.Context) {
 	if a.favFeed == nil || a.favRev != a.favs.rev {
 		f := newFeed(nil)
-		f.started = true
+		f.started, f.showWatch = true, true
 		if a.favFeed != nil {
 			f.grid = a.favFeed.grid // stay where the viewer scrolled to
 		}
 		f.add(page{cards: a.favs.cards()})
 		a.favFeed, a.favRev = f, a.favs.rev
 	}
+	a.favFeed.showWatch = true
 	a.gridPage(c, "收藏", a.favFeed, nil, nil, 0, "还没有收藏。在剧集页点「收藏」，想看的就存下来。")
 }
 

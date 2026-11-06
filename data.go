@@ -48,20 +48,21 @@ type fetcher func(ctx context.Context, cursor string) (page, error)
 // feed is a list of series loaded a page at a time. It belongs to the
 // main thread.
 type feed struct {
-	fetch   fetcher
-	cards   []card
-	seen    map[string]bool
-	cursor  string
-	more    bool
-	started bool
-	loading bool
-	stale   bool // the cards came from the disk cache: the first page replaces them
-	err     error
-	errAt   time.Time
-	tries   int // retries made by themselves since the last success
-	grid    ui.GridState
-	onPage  func(page)
-	order   func([]card) // sorts the cards after each page, when set
+	fetch     fetcher
+	cards     []card
+	seen      map[string]bool
+	cursor    string
+	more      bool
+	started   bool
+	loading   bool
+	stale     bool // the cards came from the disk cache: the first page replaces them
+	err       error
+	errAt     time.Time
+	tries     int // retries made by themselves since the last success
+	grid      ui.GridState
+	showWatch bool // cards show the viewer's progress, as on the favorites page
+	onPage    func(page)
+	order     func([]card) // sorts the cards after each page, when set
 }
 
 func newFeed(fetch fetcher) *feed {
@@ -417,6 +418,37 @@ func (a *app) following(sp *seriesPage, n int) (seriesID string, number int, ok 
 }
 
 func seasonLabel(se model.Season) string { return fmt.Sprintf("第 %d 季", se.Index) }
+
+// seasonIndex is the current season's number when the series has several;
+// a single season, or one whose place is not known, is zero.
+func (sp *seriesPage) seasonIndex() int {
+	if sp == nil {
+		return 0
+	}
+	if len(sp.seasons) > 1 {
+		for _, se := range sp.seasons {
+			if se.SeriesID == sp.id {
+				return se.Index
+			}
+		}
+	}
+	if sp.series != nil {
+		return seasonNumber(sp.series.Title)
+	}
+	return 0
+}
+
+// seasonNumber reads the season a title names, as 持械入宋：第三季 or
+// 浅浅归聿第二季.
+func seasonNumber(title string) int {
+	if m := seasonTitle.FindStringSubmatch(title); m != nil {
+		return chineseNumber(m[2])
+	}
+	if m := seasonMark.FindAllStringSubmatch(title, -1); len(m) > 0 {
+		return chineseNumber(m[len(m)-1][1])
+	}
+	return 0
+}
 
 // seasonMark is a season's number in its title: 第三季, 第 3 部.
 var seasonMark = regexp.MustCompile(`第\s*([0-9一二两三四五六七八九十百零〇]+)\s*[季部]`)
