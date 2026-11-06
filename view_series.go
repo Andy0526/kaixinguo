@@ -254,7 +254,7 @@ func (a *app) episodeGrid(c *ui.Context, sp *seriesPage) {
 		ui.Row(c).Wrap().Gap(8).Children(func() {
 			for _, e := range eps[lo:hi] {
 				watched, progress := w.episodeState(e.Number)
-				if a.episodeChip(c, e, e.Number == cur, watched, progress, t).Clicked() && e.Playable {
+				if a.episodeChip(c, e, e.Number == cur, watched, progress, 56, t).Clicked() && e.Playable {
 					a.play(sp.id, e.Number, w.episodeStart(e.Number))
 				}
 			}
@@ -345,8 +345,8 @@ func (a *app) partRange(sp *seriesPage) (int, int) {
 // episodeChip is an episode's number to click, filled while it is the
 // one the viewer is on. Watched episodes carry a check; a partly watched
 // one a line at the bottom.
-func (a *app) episodeChip(c *ui.Context, e model.Episode, current, watched bool, progress float64, t *ui.Theme) ui.Element {
-	b := ui.ButtonBase(c.Key(e.ID)).Size(56, 38).Radius(9).Center().Label(fmt.Sprintf("第 %d 集", e.Number))
+func (a *app) episodeChip(c *ui.Context, e model.Episode, current, watched bool, progress float64, width float32, t *ui.Theme) ui.Element {
+	b := ui.ButtonBase(c.Key(e.ID)).Size(width, 38).Radius(9).Center().Label(fmt.Sprintf("第 %d 集", e.Number))
 	switch {
 	case current:
 		b.Background(t.Accent).TextColor(t.AccentText)
@@ -386,9 +386,19 @@ func (a *app) episodeChip(c *ui.Context, e model.Episode, current, watched bool,
 				track, fill = t.AccentText.Alpha(0.3), t.AccentText
 			}
 			ui.Box(c).Absolute().Left(7).Right(7).Bottom(4).Height(2).Radius(1).Background(track)
-			ui.Box(c).Absolute().Left(7).Bottom(4).Height(2).Radius(1).Width(30 * float32(progress)).
-				Background(fill)
+			// The fill follows the track's width: the series' chips are
+			// wider than the player's.
+			ui.Box(c).Absolute().Left(7).Bottom(4).Height(2).Radius(1).
+				Width(episodeProgressWidth(width, progress)).Background(fill)
 		}
 	})
 	return b
+}
+
+// episodeProgressWidth fills the track between the chip's 7pt insets.
+func episodeProgressWidth(width float32, progress float64) float32 {
+	if width <= 14 || progress <= 0 {
+		return 0
+	}
+	return (width - 14) * float32(progress)
 }

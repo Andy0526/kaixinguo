@@ -408,7 +408,7 @@ func (a *app) playerPanelBody(c *ui.Context, sp *seriesPage, drawer, forceReveal
 		ui.Row(c).Wrap().Gap(8).Children(func() {
 			for _, e := range sp.episodes[lo:hi] {
 				watched, progress := w.episodeState(e.Number)
-				chip := a.episodeChip(c, e, e.Number == cur, watched, progress, t).Size(44, 38)
+				chip := a.episodeChip(c, e, e.Number == cur, watched, progress, 44, t)
 				if reveal && e.Number == cur {
 					chip.ScrollIntoView()
 				}

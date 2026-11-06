@@ -493,7 +493,8 @@ vol.addEventListener('input', () => {
   v.muted = v.volume === 0;
   syncVolume();
 });
-vol.addEventListener('change', () => vol.blur());
+// Blur only when the pointer lets go, so the arrow keys keep working
+// after a keyboard volume change.
 vol.addEventListener('pointerup', () => vol.blur());
 // A click on the picture plays or pauses it, as the video's controls do;
 // a double click, held back until the system's double-click window has
@@ -515,13 +516,13 @@ seek.addEventListener('input', () => {
   if (isFinite(v.duration)) v.currentTime = seek.value / 1000 * v.duration;
   fill(seek); cur.textContent = fmt(v.currentTime);
 });
-function endSeek() {
+function endSeek(blur) {
   if (seeking) { seeking = false; syncTime() }
-  seek.blur();
+  if (blur) seek.blur();
 }
-seek.addEventListener('pointerup', endSeek);
-seek.addEventListener('change', endSeek);
-document.addEventListener('pointerup', () => { if (seeking) endSeek() });
+seek.addEventListener('pointerup', () => endSeek(true));
+seek.addEventListener('change', () => endSeek(false));
+document.addEventListener('pointerup', () => { if (seeking) endSeek(true) });
 v.addEventListener('loadedmetadata', syncTime);
 v.addEventListener('durationchange', syncTime);
 v.addEventListener('timeupdate', syncTime);

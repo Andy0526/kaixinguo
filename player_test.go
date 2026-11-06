@@ -344,3 +344,21 @@ func TestDrawerRevealsCurrentEpisode(t *testing.T) {
 		t.Fatalf("episode 87 at %v, not in the drawer", r)
 	}
 }
+
+// The progress line uses each chip's track, not the player's fixed width.
+func TestEpisodeProgressWidth(t *testing.T) {
+	for _, tc := range []struct {
+		width    float32
+		progress float64
+		want     float32
+	}{
+		{56, 0.5, 21},
+		{44, 0.5, 15},
+		{56, 0, 0},
+		{14, 0.5, 0},
+	} {
+		if got := episodeProgressWidth(tc.width, tc.progress); got != tc.want {
+			t.Fatalf("width %v, progress %v: got %v, want %v", tc.width, tc.progress, got, tc.want)
+		}
+	}
+}
