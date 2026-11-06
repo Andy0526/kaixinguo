@@ -14,10 +14,43 @@ import (
 )
 
 const (
-	gridPadX   = 22  // the grid's margin, outside its cells' own
-	cellPadX   = 8   // room on each side of a poster in its cell
-	posterMinW = 150 // the narrowest a cell gets
+	gridPadX   = 32  // the grid's margin, outside its cells' own
+	cellBorder = 2   // the clear border GridView keeps around each cell
+	cellPadX   = 12  // room on each side of a poster in its cell
+	posterMinW = 176 // the narrowest a poster gets
+	cellMinW   = posterMinW + 2*(cellBorder+cellPadX)
+	// posterInset is where the first column's posters start, which the
+	// page's title and controls line up with.
+	posterInset = gridPadX + cellBorder + cellPadX
+
+	// The room in a card above its poster, between the poster and the
+	// lines about it, and under those lines, which keeps the rows apart.
+	cardPadTop    = 6
+	cardTitleGap  = 12
+	cardPadBottom = 18
+	// coverMute is how much of a poster's color gives way to gray until
+	// the pointer comes: the covers are loud, and a wall of them more so.
+	coverMute = 0.4
 )
+
+// gridMetrics is how a grid of cards fits the page: how many columns, as
+// GridView counts them, and how high each row, so that every poster is 3:4.
+func (a *app) gridMetrics(c *ui.Context) (cols int, rowH float32) {
+	w, _ := c.Size()
+	inner := w - sidebarWidth*a.sideShown - 1 - 2*gridPadX
+	gap := c.Theme().Space(2)
+	cols = max(1, int((inner+gap)/(cellMinW+gap)))
+	cellW := (inner - float32(cols-1)*gap) / float32(cols)
+	posterW := cellW - (cellMinW - posterMinW)
+	return cols, posterW*4/3 + cardChrome
+}
+
+// cardChrome is the height of a card's cell besides its poster: the
+// border, the room around the poster and the two lines under it.
+const cardChrome = 2*cellBorder + cardPadTop + cardTitleGap + cardLines + cardPadBottom
+
+// cardLines is the height of a card's title and the line under it.
+const cardLines = 41
 
 func (a *app) view(c *ui.Context) {
 	t := c.Theme()
@@ -218,7 +251,7 @@ func (a *app) sectionItem(c *ui.Context, selected, id string, icon *ui.SVG, labe
 // beside it.
 func (a *app) header(c *ui.Context, title string, right func()) {
 	ui.Row(c).Height(titleBarHeight).Shrink(0).AlignItems(ui.Center).Gap(12).
-		Padding(0, gridPadX+cellPadX, 0, gridPadX+cellPadX).DragWindow().Children(func() {
+		Padding(0, posterInset).DragWindow().Children(func() {
 		ui.Text(c, title).FontSize(22).Bold().SingleLine()
 		ui.Spacer(c)
 		if right != nil {
@@ -232,12 +265,12 @@ func (a *app) header(c *ui.Context, title string, right func()) {
 func (a *app) gridPage(c *ui.Context, title string, f *feed, right, controls func(), controlsH float32, empty string) {
 	top := float32(titleBarHeight) + controlsH
 	ui.Box(c).Fill().Children(func() {
-		a.cardGrid(c, f, top+4, empty)
+		a.cardGrid(c, f, top+12, empty)
 		ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(top + 12).PassThrough().Material(glass.ScrollEdge{})
 		ui.Column(c).Absolute().Top(0).Left(0).Right(0).Children(func() {
 			a.header(c, title, right)
 			if controls != nil {
-				ui.Row(c).Height(controlsH).AlignItems(ui.Start).Padding(0, gridPadX+cellPadX-2).Children(controls)
+				ui.Row(c).Height(controlsH).AlignItems(ui.Start).Padding(0, posterInset).Children(controls)
 			}
 		})
 	})
@@ -248,21 +281,14 @@ func (a *app) cardGrid(c *ui.Context, f *feed, top float32, empty string) {
 		a.feedState(c, f, top, empty)
 		return
 	}
-	// The rows' height: as GridView lays the cells out, a poster of 3:4 in
-	// each, and its two lines.
-	w, _ := c.Size()
-	inner := w - sidebarWidth*a.sideShown - 1 - 2*gridPadX
-	gap := c.Theme().Space(2)
-	cols := max(1, int((inner+gap)/(posterMinW+gap)))
-	itemW := (inner - float32(cols-1)*gap) / float32(cols)
-	rowH := (itemW-2*cellPadX)*4/3 + 62
+	cols, rowH := a.gridMetrics(c)
 	n := len(f.cards)
-	ui.GridView(c, &f.grid, n, posterMinW, rowH, func(i int) {
+	ui.GridView(c, &f.grid, n, cellMinW, rowH, func(i int) {
 		a.card(c, f.cards[i], f.showWatch)
 		if i >= n-cols*2 && f.more {
 			a.loadMore(f)
 		}
-	}).Fill().Padding(top, gridPadX, 24, gridPadX).ScrollbarInsets(top, 0, 0, 0)
+	}).Fill().Padding(top, gridPadX, 32, gridPadX).ScrollbarInsets(top, 0, 0, 0)
 }
 
 // feedState is what a feed with no series yet shows.
@@ -308,24 +334,24 @@ func (a *app) card(c *ui.Context, k card, showWatch bool) {
 		}
 	})
 	b.Children(func() {
-		ui.Column(c).Fill().Padding(4, cellPadX, 14, cellPadX).Gap(9).Children(func() {
-			poster := a.poster(c, k.Cover, 10, hover).Grow(1).MinHeight(0)
+		ui.Column(c).Fill().Padding(cardPadTop, cellPadX, cardPadBottom, cellPadX).Gap(cardTitleGap).Children(func() {
+			poster := a.poster(c, k.Cover, 12, hover).Grow(1).MinHeight(0)
 			if showWatch {
 				if label, fraction, bar, ok := a.favoriteProgress(k); ok {
 					poster.Children(func() { a.watchOverlay(c, label, fraction, bar) })
 				}
 			}
-			ui.Column(c).Gap(2).Children(func() {
+			ui.Column(c).Height(cardLines).Shrink(0).Gap(4).Padding(0, 2).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					if k.Rank > 0 {
-						ui.Textf(c, "%d", k.Rank).FontSize(13).Bold().TextColor(t.TextMuted).FontFeatures("tnum")
+						ui.Textf(c, "%d", k.Rank).FontSize(14).FontWeight(600).TextColor(t.TextMuted).FontFeatures("tnum")
 					}
-					ui.Text(c, k.Title).FontSize(13).FontWeight(600).SingleLine().Grow(1).MinWidth(0)
+					ui.Text(c, k.Title).FontSize(14).FontWeight(500).SingleLine().Grow(1).MinWidth(0)
 					if saved {
 						ui.Icon(c, iconStarOn).Size(11, 11).Shrink(0).TextColor(t.TextMuted.Alpha(0.7)).Tooltip("已收藏")
 					}
 				})
-				ui.Text(c, k.Sub).FontSize(12).TextColor(t.TextMuted).SingleLine()
+				ui.Text(c, k.Sub).FontSize(12).TextColor(t.TextMuted.Alpha(0.85)).SingleLine().FontFeatures("tnum")
 			})
 		})
 	})
@@ -426,18 +452,28 @@ func (a *app) watchOverlay(c *ui.Context, label string, fraction float64, bar bo
 	}
 }
 
-// poster is a cover in a rounded frame, gray until it loads, lifting a
-// little under the pointer.
+// poster is a cover in a rounded frame, gray until it loads. Its colors are
+// muted until the pointer comes, when it lifts a little in full color.
 func (a *app) poster(c *ui.Context, cover string, radius float32, hover bool) ui.Element {
 	t := c.Theme()
 	p := ui.Box(c).Radius(radius).Clip().Background(placeholder(t))
-	lift := p.Animate("lift", b2f(hover), 180*time.Millisecond)
-	s := 1 + 0.025*lift
-	p.Scale(s, s).Shadow(0, 2+5*lift, 8+14*lift, 0, ui.RGBA(0, 0, 0, 0.12+0.12*lift))
+	lift := p.Animate("lift", b2f(hover), 220*time.Millisecond)
+	s := 1 + 0.02*lift
+	p.Scale(s, s).Shadow(0, 1+9*lift, 4+20*lift, 0, ui.RGBA(0, 0, 0, 0.08+0.14*lift))
 	p.Children(func() {
 		if bmp, alpha := a.covers.get(c, cover); bmp != nil {
 			ui.Image(c, bmp).Fill().Fit(ui.Cover).Opacity(alpha)
+			// A gray copy over the cover, partly see-through, takes some
+			// of its color out: MyGo draws images in color or in gray.
+			if mute := coverMute * (1 - lift); mute > 0.01 {
+				ui.Image(c, bmp).Absolute().Top(0).Left(0).Right(0).Bottom(0).Fit(ui.Cover).
+					Grayscale().Opacity(alpha * mute)
+			}
 		}
+		// A hairline inside the edge, which keeps dark covers from
+		// bleeding into a dark page and light ones into a light page.
+		ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Radius(radius).
+			Border(1, t.Text.Alpha(0.08)).PassThrough()
 	})
 	return p
 }
@@ -631,22 +667,34 @@ func (a *app) hotPage(c *ui.Context) {
 		case a.hot == nil:
 			ui.Column(c).Fill().Center().Children(func() { ui.Spinner(c).FontSize(20).Label("正在加载") })
 		default:
-			ui.Scroll(c).Fill().Padding(top, gridPadX, 28, gridPadX).ScrollbarInsets(top, 0, 0, 0).Children(func() {
+			// The boards' cards are as large as the other pages' grids.
+			cols, rowH := a.gridMetrics(c)
+			gap := t.Space(2)
+			ui.Scroll(c).Fill().Padding(top, gridPadX, 32, gridPadX).ScrollbarInsets(top, 0, 0, 0).Children(func() {
 				for _, b := range a.hot.Boards {
 					if len(b.Items) == 0 {
 						continue
 					}
-					ui.Text(c, b.Name).FontSize(17).Bold().Margin(14, cellPadX, 10, cellPadX)
-					ui.Row(c).Wrap().Children(func() {
-						for _, it := range b.Items {
-							k := card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: it.SearchScore,
-								Rank: it.Position, Episodes: it.EpisodeCount}
-							if k.Sub == "" {
-								k.Sub = it.Heat
+					ui.Text(c, b.Name).FontSize(17).Bold().Margin(20, cellBorder+cellPadX, 6, cellBorder+cellPadX)
+					for r := 0; r < len(b.Items); r += cols {
+						ui.Row(c).Gap(gap).PaddingY(gap / 2).Children(func() {
+							for i := r; i < r+cols; i++ {
+								if i >= len(b.Items) {
+									// Empty places keep the last row's cards as wide as the others.
+									ui.Box(c).Grow(1).Basis(0).MinWidth(0)
+									continue
+								}
+								it := b.Items[i]
+								k := card{ID: it.SeriesID, Title: it.Title, Cover: it.CoverURL, Sub: it.SearchScore,
+									Rank: it.Position, Episodes: it.EpisodeCount}
+								if k.Sub == "" {
+									k.Sub = it.Heat
+								}
+								ui.Box(c.Key(b.Name + it.SeriesID)).Grow(1).Basis(0).MinWidth(0).Height(rowH).
+									Padding(cellBorder).Children(func() { a.card(c, k, false) })
 							}
-							ui.Box(c.Key(b.Name+it.SeriesID)).Size(166, (166-2*cellPadX)*4/3+62).Children(func() { a.card(c, k, false) })
-						}
-					})
+						})
+					}
 				}
 			})
 		}
