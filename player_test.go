@@ -160,13 +160,35 @@ func TestTheaterEventWithoutTheCurrentEpisode(t *testing.T) {
 // The player's controls are the app's bottom bar, not the video's native
 // ones, which put the small window and full screen buttons over the picture.
 func TestPlayerControlsAreTheBottomBar(t *testing.T) {
-	for _, want := range []string{`id="bar"`, `id="seek"`, `id="vol"`, `id="pip"`, `<video id="v" playsinline`} {
+	for _, want := range []string{`id="bar"`, `id="seek"`, `id="vol"`, `id="pip"`, `id="prev"`, `id="rew"`, `id="fwd"`, `id="next"`, `<video id="v" playsinline`} {
 		if !strings.Contains(playerHTML, want) {
 			t.Fatalf("the player page has no %s", want)
 		}
 	}
 	if strings.Contains(playerHTML, `<video id="v" controls`) {
 		t.Fatal("the player page still uses the native video controls")
+	}
+}
+
+// In the theater the top buttons follow the bottom bar: both hide while
+// the picture plays, and both come back when the pointer moves.
+func TestTheaterTopButtonsFollowTheBar(t *testing.T) {
+	a, tt := playerApp(t)
+	click(t, tt, "影院")
+	if !tt.HasText("退出播放") || !tt.HasText("退出影院") {
+		t.Fatalf("no top buttons at first: %q", tt.Texts())
+	}
+
+	a.onPlayerEvent(url.Values{"type": {"chrome"}, "on": {"0"}, "ep": {"e1"}})
+	tt.Frame()
+	if tt.HasText("退出播放") || tt.HasText("退出影院") {
+		t.Fatalf("top buttons stay when the bar hides: %q", tt.Texts())
+	}
+
+	a.onPlayerEvent(url.Values{"type": {"chrome"}, "on": {"1"}, "ep": {"e1"}})
+	tt.Frame()
+	if !tt.HasText("退出播放") || !tt.HasText("退出影院") {
+		t.Fatalf("top buttons do not come back with the bar: %q", tt.Texts())
 	}
 }
 
