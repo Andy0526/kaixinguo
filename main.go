@@ -92,22 +92,26 @@ type app struct {
 	js        chan string // what the page runs, in order
 	onPlayer  bool
 	playerSet bool // the player page has its system settings
+	// playerChrome is whether the page's bottom bar is showing. In the
+	// theater the top buttons hide and come back with it.
+	playerChrome bool
 }
 
 func newApp(dataDir, cacheDir string) *app {
 	a := &app{
-		ready:      make(chan struct{}),
-		router:     ui.NewRouter("/discover"),
-		cacheDir:   cacheDir,
-		dataDir:    dataDir,
-		section:    "/discover",
-		recentOpen: true,
-		sideShown:  1,
-		feeds:      map[string]*feed{},
-		series:     map[string]*seriesPage{},
-		futures:    map[string]*future{},
-		hist:       loadHistory(dataDir),
-		favs:       loadFavorites(dataDir),
+		ready:        make(chan struct{}),
+		router:       ui.NewRouter("/discover"),
+		cacheDir:     cacheDir,
+		dataDir:      dataDir,
+		section:      "/discover",
+		recentOpen:   true,
+		sideShown:    1,
+		feeds:        map[string]*feed{},
+		series:       map[string]*seriesPage{},
+		futures:      map[string]*future{},
+		hist:         loadHistory(dataDir),
+		favs:         loadFavorites(dataDir),
+		playerChrome: true,
 	}
 	a.covers = newCovers(filepath.Join(cacheDir, "covers"), a.update)
 	a.home = newFeed(a.discover)

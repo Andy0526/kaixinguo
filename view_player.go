@@ -64,8 +64,12 @@ func (a *app) playerView(c *ui.Context, id string) {
 					edgeHovered = a.episodesEdge(c)
 				}
 				ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(titleBarHeight).DragWindow()
-				a.exitButton(c)
-				a.playerToolbar(c, theater)
+				// In the theater the top buttons keep the bottom bar company:
+				// both hide while the picture plays and come back on a move.
+				if !theater || a.playerChrome {
+					a.exitButton(c)
+					a.playerToolbar(c, theater)
+				}
 			})
 			if !theater {
 				a.playerPanel(c, sp)
