@@ -180,7 +180,7 @@ func TestPlayerControlsAreTheBottomBar(t *testing.T) {
 	for _, want := range []string{
 		"#bar{position:fixed;left:50%",
 		"width:min(680px,calc(100% - 24px))",
-		"background:rgba(24,24,26,.56)",
+		"background:rgba(24,24,26,.42)",
 		"#seek{flex:0 1 320px",
 		"const hideAfter = 4000;",
 	} {

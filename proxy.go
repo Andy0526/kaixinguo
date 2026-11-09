@@ -337,7 +337,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
   letter-spacing:.02em;opacity:0;transition:opacity .16s ease;pointer-events:none;z-index:3;white-space:nowrap}
 #hud.show{opacity:1}
 #bar{position:fixed;left:50%;bottom:12px;width:min(680px,calc(100% - 24px));display:flex;flex-direction:column;gap:4px;
-  padding:8px 14px 7px;border-radius:15px;background:rgba(24,24,26,.56);-webkit-backdrop-filter:blur(18px);
+  padding:8px 14px 7px;border-radius:15px;background:rgba(24,24,26,.42);-webkit-backdrop-filter:blur(18px);
   backdrop-filter:blur(18px);box-shadow:0 8px 28px rgba(0,0,0,.26);color:#fff;z-index:2;
   opacity:0;transform:translate(-50%,8px);transition:opacity .18s ease,transform .18s ease;pointer-events:none}
 body.controls #bar{opacity:1;transform:translate(-50%,0);pointer-events:auto}
