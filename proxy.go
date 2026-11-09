@@ -336,14 +336,14 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
   background:rgba(18,18,20,.78);color:#fff;font:500 12px/1 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
   letter-spacing:.02em;opacity:0;transition:opacity .16s ease;pointer-events:none;z-index:3;white-space:nowrap}
 #hud.show{opacity:1}
-#bar{position:fixed;left:12px;right:12px;bottom:12px;display:flex;flex-direction:column;gap:4px;
-  padding:8px 14px 7px;border-radius:15px;background:rgba(24,24,26,.82);-webkit-backdrop-filter:blur(22px);
-  backdrop-filter:blur(22px);box-shadow:0 10px 34px rgba(0,0,0,.38);color:#fff;z-index:2;
-  opacity:0;transform:translateY(8px);transition:opacity .18s ease,transform .18s ease;pointer-events:none}
-body.controls #bar{opacity:1;transform:none;pointer-events:auto}
+#bar{position:fixed;left:50%;bottom:12px;width:min(680px,calc(100% - 24px));display:flex;flex-direction:column;gap:4px;
+  padding:8px 14px 7px;border-radius:15px;background:rgba(24,24,26,.56);-webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);box-shadow:0 8px 28px rgba(0,0,0,.26);color:#fff;z-index:2;
+  opacity:0;transform:translate(-50%,8px);transition:opacity .18s ease,transform .18s ease;pointer-events:none}
+body.controls #bar{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 body:not(.controls){cursor:none}
 #transport{display:flex;align-items:center;justify-content:center;gap:10px;height:36px}
-#track{display:flex;align-items:center;gap:8px;height:28px}
+#track{display:flex;align-items:center;justify-content:center;gap:8px;height:28px}
 #bar .ctl{width:28px;height:28px;flex:none;padding:0;border:0;border-radius:8px;background:transparent;
   color:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;cursor:pointer}
 #transport .ctl{width:32px;height:32px;border-radius:10px}
@@ -364,7 +364,7 @@ input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radi
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;
   background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4);opacity:0;transition:opacity .12s}
 #bar:hover input[type=range]::-webkit-slider-thumb{opacity:1}
-#seek{flex:1;min-width:50px}
+#seek{flex:0 1 320px;width:320px;min-width:50px}
 #vol{width:72px;flex:none}
 </style></head>
 <body><video id="v" playsinline preload="auto"></video>
@@ -418,6 +418,7 @@ const muteBtn = document.getElementById('mute');
 const pipBtn = document.getElementById('pip');
 let ep = '', last = 0, brightness = 1, hudTimer = 0, hideTimer = 0, seeking = false;
 let hold = false, dblInterval = 500, chromeOn = false;
+const hideAfter = 4000;
 function send(type, extra) {
   fetch('event?type=' + type + '&ep=' + encodeURIComponent(ep) + (extra || '')).catch(() => {});
 }
@@ -459,7 +460,7 @@ function setChrome(on) {
 function showControls() {
   setChrome(true);
   clearTimeout(hideTimer);
-  if (!v.paused) hideTimer = setTimeout(() => setChrome(false), 2600);
+  if (!v.paused) hideTimer = setTimeout(() => setChrome(false), hideAfter);
 }
 function hideControls() { setChrome(false) }
 function showHud(text) {
@@ -581,7 +582,7 @@ window.addEventListener('mousemove', e => {
   showControls();
 });
 bar.addEventListener('mouseenter', () => { clearTimeout(hideTimer); setChrome(true) });
-bar.addEventListener('mouseleave', () => { clearTimeout(hideTimer); if (!v.paused) hideTimer = setTimeout(hideControls, 1800) });
+bar.addEventListener('mouseleave', () => { clearTimeout(hideTimer); if (!v.paused) hideTimer = setTimeout(hideControls, hideAfter) });
 v.addEventListener('ended', () => send('ended'));
 v.addEventListener('playing', () => send('playing'));
 v.addEventListener('waiting', () => send('waiting'));

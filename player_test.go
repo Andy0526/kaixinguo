@@ -175,6 +175,19 @@ func TestPlayerControlsAreTheBottomBar(t *testing.T) {
 	if !strings.Contains(playerHTML, "#transport{display:flex;align-items:center;justify-content:center;gap:10px;height:36px}") {
 		t.Fatal("the transport buttons are not centered")
 	}
+	// The bar and its progress line are centered and shorter than the
+	// picture, and translucent enough to keep the picture visible.
+	for _, want := range []string{
+		"#bar{position:fixed;left:50%",
+		"width:min(680px,calc(100% - 24px))",
+		"background:rgba(24,24,26,.56)",
+		"#seek{flex:0 1 320px",
+		"const hideAfter = 4000;",
+	} {
+		if !strings.Contains(playerHTML, want) {
+			t.Fatalf("the player bar no longer has %q", want)
+		}
+	}
 }
 
 // In the theater the top buttons follow the bottom bar: both hide while
