@@ -168,6 +168,13 @@ func TestPlayerControlsAreTheBottomBar(t *testing.T) {
 	if strings.Contains(playerHTML, `<video id="v" controls`) {
 		t.Fatal("the player page still uses the native video controls")
 	}
+	// The transport buttons sit above the progress bar, centered.
+	if strings.Index(playerHTML, `id="transport"`) > strings.Index(playerHTML, `id="seek"`) {
+		t.Fatal("the transport buttons are not above the progress bar")
+	}
+	if !strings.Contains(playerHTML, "#transport{display:flex;align-items:center;justify-content:center;gap:10px;height:36px}") {
+		t.Fatal("the transport buttons are not centered")
+	}
 }
 
 // In the theater the top buttons follow the bottom bar: both hide while
