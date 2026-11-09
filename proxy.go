@@ -418,7 +418,7 @@ const muteBtn = document.getElementById('mute');
 const pipBtn = document.getElementById('pip');
 let ep = '', last = 0, brightness = 1, hudTimer = 0, hideTimer = 0, seeking = false;
 let hold = false, dblInterval = 500, chromeOn = false;
-const hideAfter = 4000;
+const hideAfter = 2000;
 function send(type, extra) {
   fetch('event?type=' + type + '&ep=' + encodeURIComponent(ep) + (extra || '')).catch(() => {});
 }
