@@ -14,6 +14,7 @@
   <a href="https://github.com/kadaliao/kaixinguo/actions/workflows/ci.yml"><img src="https://github.com/kadaliao/kaixinguo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-12%2B-111?logo=apple" alt="macOS 12+">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/kadaliao/kaixinguo" alt="MIT"></a>
+  <a href="https://awesomemygo.dev/apps/kaixinguo"><img src="https://awesomemygo.dev/badge.svg" height="20" alt="Listed on Awesome MyGo"></a>
 </p>
 
 ![开心果的推荐页](docs/screenshots/discover.webp)
