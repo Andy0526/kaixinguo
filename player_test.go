@@ -179,7 +179,7 @@ func TestPlayerControlsAreTheBottomBar(t *testing.T) {
 	// picture, and translucent enough to keep the picture visible.
 	for _, want := range []string{
 		"#bar{position:fixed;left:50%",
-		"width:min(680px,calc(100% - 24px))",
+		"width:min(680px,calc(100% - 24px));box-sizing:border-box",
 		"background:rgba(24,24,26,.42)",
 		"#seek{flex:0 1 320px",
 		"const hideAfter = 2000;",
