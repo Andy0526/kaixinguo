@@ -99,6 +99,9 @@ type app struct {
 	// playerChrome is whether the page's bottom bar is showing. In the
 	// theater the top buttons hide and come back with it.
 	playerChrome bool
+	// playerTopHovered is whether the pointer was over the top buttons,
+	// which keeps them as the bar hides.
+	playerTopHovered bool
 }
 
 func newApp(dataDir, cacheDir string) *app {

@@ -212,6 +212,31 @@ func TestTheaterTopButtonsFollowTheBar(t *testing.T) {
 	}
 }
 
+// The page cannot see the pointer over the top buttons, so they stay while
+// it rests on them, and go once it leaves them.
+func TestTheaterTopButtonsStayUnderThePointer(t *testing.T) {
+	a, tt := playerApp(t)
+	click(t, tt, "影院")
+	r, ok := tt.Find("退出影院")
+	if !ok {
+		t.Fatalf("no 退出影院: %q", tt.Texts())
+	}
+	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+
+	a.onPlayerEvent(url.Values{"type": {"chrome"}, "on": {"0"}, "ep": {"e1"}})
+	tt.Frame()
+	if !tt.HasText("退出播放") || !tt.HasText("退出影院") {
+		t.Fatalf("the top buttons hide under the pointer: %q", tt.Texts())
+	}
+
+	tt.Move(r.X+r.W/2, r.Y+300)
+	tt.Frame()
+	if tt.HasText("退出播放") || tt.HasText("退出影院") {
+		t.Fatalf("the top buttons stay after the pointer leaves them: %q", tt.Texts())
+	}
+}
+
 // The player's exit and the series' back stay clear of the traffic lights.
 func TestTitleBarButtonsClearOfTrafficLights(t *testing.T) {
 	a := testApp(t)
